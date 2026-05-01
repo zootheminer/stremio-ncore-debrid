@@ -438,8 +438,8 @@ async function checkAllTorrents(candidates, season, episode, imdbId) {
   }
 
   // 1. Info_hash beszerzése: cache-ből, vagy .torrent letöltéssel (top 5)
-  const top5 = candidates.slice(0, 5)
-  const hashResults = await Promise.allSettled(top5.map(async (t) => {
+  const topCandidates = candidates.slice(0, 5)
+  const hashResults = await Promise.allSettled(topCandidates.map(async (t) => {
     if (hashCache[t.id]) return { torrentId: t.id, infoHash: hashCache[t.id] }
     try {
       const buf = await ncore.downloadTorrent(t.id, t.downloadUrl)
