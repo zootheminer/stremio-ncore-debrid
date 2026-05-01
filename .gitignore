@@ -1,0 +1,13 @@
+# Környezeti változók (API kulcsok, jelszavak)
+.env
+
+# Node.js
+node_modules/
+npm-debug.log*
+
+# Ideiglenes fájlok
+*.torrent
+/tmp/
+
+# Kliens specifikus fájlok
+.hermes/

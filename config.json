@@ -1,0 +1,18 @@
+{
+  "seedLimits": {
+    "movie": 50,
+    "series": 20
+  },
+  "catalogLimits": {
+    "movie": 50,
+    "series": 50
+  },
+  "catalogPages": {
+    "movie": 2,
+    "series": 2
+  },
+  "stream": {
+    "maxCandidates": 10,
+    "maxUncachedToWait": 2
+  }
+}
