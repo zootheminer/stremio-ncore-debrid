@@ -292,10 +292,23 @@ builder.defineStreamHandler(async ({ type, id }) => {
 
 // ─── Segéd: stream cím formázás ──────────────────────────────────
 function makeStreamDisplay(torrent, isCached, cacheType, season, episode) {
-  const qual = torrent.resolution || torrent.quality || ''
   const lang = torrent.language || ''
   const flag = { 'HUN': '🇭🇺', 'ENG': '🇬🇧', 'MULTi': '🌍', 'HUN+ENG': '🇭🇺+🇬🇧' }[lang] || ''
   const cacheIcon = cacheType === 'personal' ? '⚡' : cacheType === 'global' ? '🌐' : '⏳'
+  
+  // Felbontás: explicit resolution > quality→resolution tipp > maga a quality
+  const QUAL_TO_RES = {
+    'BDRip': '1080p',
+    'WEB-DL': '1080p',
+    'WebRip': '720p',
+    'BluRay': '1080p',
+    'HDTV': '720p',
+    'HDRip': '720p',
+    'DVDRip': '480p',
+    'DVD': '480p',
+    'Remux': '1080p'
+  }
+  const qual = torrent.resolution || QUAL_TO_RES[torrent.quality] || torrent.quality || ''
   
   const name = torrent.title
     .replace(/\./g, ' ')
