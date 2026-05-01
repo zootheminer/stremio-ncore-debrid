@@ -410,9 +410,35 @@ function saveHashCache() {
 }
 
 async function checkAllTorrents(candidates, season, episode, imdbId) {
+  const baseUrl = PUBLIC_URL || `http://localhost:${PORT}`
+
+  // 0. Globális cache ellenőrzés (ha be van kapcsolva)
+  if (CHECK_GLOBAL_CACHE && candidates.length > 0) {
+    const top = candidates[0]
+    try {
+      const buf = await ncore.downloadTorrent(top.id, top.downloadUrl)
+      if (buf) {
+        const globalResult = await debrid.checkGlobalCache(buf, season, episode)
+        if (globalResult.cached && globalResult.streamUrl) {
+          console.log(`[STREAM] ✅ Globális cache-ben: ${top.title.substring(0, 40)}`)
+          const display = makeStreamDisplay(top, true, 'global', season, episode)
+          return {
+            streams: [{
+              name: display.name,
+              title: display.title,
+              url: globalResult.streamUrl,
+              behaviorHints: { notWebReady: false, bingeGroup: 'ncore-debrid' }
+            }]
+          }
+        }
+      }
+    } catch (e) {
+      console.log(`[STREAM] Globális cache ellenőrzés hiba: ${e.message}`)
+    }
+  }
+
   const topCandidates = candidates.slice(0, 5)
   const streams = []
-  const baseUrl = PUBLIC_URL || `http://localhost:${PORT}`
 
   // 1. Info_hash beszerzése: cache-ből, vagy .torrent letöltéssel (top 3)
   const top3 = topCandidates.slice(0, 3)
