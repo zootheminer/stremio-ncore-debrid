@@ -1,4 +1,4 @@
-# Környezeti változók (API kulcsok, jelszavak)
+# Környezeti változók (API kulcsok, jelszavak) — SOHA NE KERÜLJÖN FEL
 .env
 
 # Node.js
@@ -11,3 +11,6 @@ npm-debug.log*
 
 # Kliens specifikus fájlok
 .hermes/
+
+# Projekt specifikus
+_gh_search.js
