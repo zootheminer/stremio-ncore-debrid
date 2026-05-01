@@ -242,7 +242,7 @@ class DebridClient {
    */
   async deleteTorrent(torrentId) {
     try {
-      const res = await this.client.delete(`/seedbox/${torrentId}`)
+      const res = await this.client.delete(`/seedbox/${torrentId}/remove`)
       return res.data?.success === true
     } catch (err) {
       console.warn('[DEBRID] Törlési hiba:', torrentId, err.message, '- status:', err.response?.status)
