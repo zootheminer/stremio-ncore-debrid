@@ -310,14 +310,14 @@ class DebridClient {
           ? this._getDownloadLinkByEpisode(tv.files, season, episode)
           : this._getDownloadLink(tv.files))
         if (streamUrl) {
-          // Megvan → megtartjuk a seedboxban (legközelebb ⚡)
+          // Megvan → töröljük (csak ellenőrzés volt, stream URL megvan)
+          await this.deleteTorrent(torrentId)
           return { cached: true, streamUrl }
         }
       }
 
-      // Nincs cache-ben → töröljük (nem foglal slot-ot)
-      console.log('[DEBRID] ⏳ Nincs globális cache-ben, törlés...')
-      await this.deleteTorrent(torrentId)
+      // Nincs cache-ben → megtartjuk (elkezdődhet a letöltés)
+      console.log('[DEBRID] ⏳ Nincs globális cache-ben, megtartva')
       return { cached: false }
 
     } catch (err) {
