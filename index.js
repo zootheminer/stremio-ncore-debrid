@@ -329,7 +329,7 @@ function makeStreamDisplay(torrent, isCached, cacheType, season, episode) {
   // 1. sor: stream név
   lines.push(name)
   
-  // 2. sor: S01E01 (sorozat) · 📦méret
+  // 2. sor: S01E01 (sorozat) · 📦méret · év · ⭐ rating
   const infoParts = []
   if (season && episode) {
     const s = String(season).padStart(2, '0')
@@ -337,10 +337,14 @@ function makeStreamDisplay(torrent, isCached, cacheType, season, episode) {
     infoParts.push(`S${s}E${e}`)
   }
   if (torrent.size && torrent.size !== '?') infoParts.push(`📦${torrent.size}`)
+  if (torrent.year) infoParts.push(torrent.year)
+  if (torrent.imdbRating && torrent.imdbRating !== '0') infoParts.push(`⭐ ${torrent.imdbRating}`)
   if (infoParts.length > 0) lines.push(infoParts.join(' · '))
   
-  // 3. sor: 🌱 seed
-  lines.push(`🌱 ${torrent.seeders}`)
+  // 3. sor: 🌱 seed · 🔄 leech
+  const seedParts = [`🌱 ${torrent.seeders}`]
+  if (torrent.leechers > 0) seedParts.push(`🔄 ${torrent.leechers}`)
+  lines.push(seedParts.join(' · '))
   
   return { name: streamName, title: lines.join('\n') }
 }
