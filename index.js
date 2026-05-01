@@ -302,18 +302,21 @@ function makeStreamDisplay(torrent, isCached, cacheType, season, episode) {
     .replace(/\s+/g, ' ')
     .trim()
   
+  // name mező: 1. sor nCore + ikon, 2. sor zászló + felbontás
+  const nameParts = [`nCore ${cacheIcon}`]
+  const badgeParts = []
+  if (flag) badgeParts.push(flag)
+  if (qual) badgeParts.push(qual)
+  if (badgeParts.length > 0) nameParts.push(badgeParts.join(' · '))
+  const streamName = nameParts.join('\n')
+  
+  // Title sorok
   const lines = []
   
-  // 1. sor: zászló + felbontás (az nCore ⚡/🌐/⏳ név alatt)
-  const topParts = []
-  if (flag) topParts.push(flag)
-  if (qual) topParts.push(qual)
-  if (topParts.length > 0) lines.push(topParts.join(' · '))
-  
-  // 2. sor: stream név
+  // 1. sor: stream név
   lines.push(name)
   
-  // 3. sor: S01E01 (sorozat) · 📦méret
+  // 2. sor: S01E01 (sorozat) · 📦méret
   const infoParts = []
   if (season && episode) {
     const s = String(season).padStart(2, '0')
@@ -323,10 +326,10 @@ function makeStreamDisplay(torrent, isCached, cacheType, season, episode) {
   if (torrent.size && torrent.size !== '?') infoParts.push(`📦${torrent.size}`)
   if (infoParts.length > 0) lines.push(infoParts.join(' · '))
   
-  // 4. sor: 🌱 seed
+  // 3. sor: 🌱 seed
   lines.push(`🌱 ${torrent.seeders}`)
   
-  return { title: lines.join('\\n') }
+  return { name: streamName, title: lines.join('\n') }
 }
 
 // ─── Segéd: sorozat epizód szűrés ───────────────────────────────
@@ -464,7 +467,7 @@ async function checkAllTorrents(candidates, season, episode, imdbId) {
     const dlParam = encodeURIComponent(torrent.downloadUrl || '')
     const imdbParam = encodeURIComponent(imdbId || '')
     streams.push({
-      name: cacheType === 'personal' ? 'nCore ⚡' : cacheType === 'global' ? 'nCore 🌐' : 'nCore ⏳',
+      name: display.name,
       title: display.title,
       url: isCached && streamUrl 
         ? streamUrl  // ⚡ közvetlen Debrid-Link URL
