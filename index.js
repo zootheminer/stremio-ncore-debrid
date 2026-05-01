@@ -472,7 +472,9 @@ async function checkAllTorrents(candidates, season, episode, imdbId) {
           t.hashString && t.hashString.toLowerCase() === th.toLowerCase() && t.downloadPercent === 100
         )
         if (cachedTorrent && cachedTorrent.files) {
-          streamUrl = await debrid._getDownloadLink(cachedTorrent.files)
+          streamUrl = await (season && episode
+            ? debrid._getDownloadLinkByEpisode(cachedTorrent.files, season, episode)
+            : debrid._getDownloadLink(cachedTorrent.files))
         }
       }
     }
@@ -499,7 +501,7 @@ async function checkAllTorrents(candidates, season, episode, imdbId) {
       title: display.title,
       url: isCached && streamUrl 
         ? streamUrl  // ⚡ közvetlen Debrid-Link URL
-        : `${baseUrl}/play/${torrent.id}?dl=${dlParam}&imdb=${imdbParam}`,  // ⏳ proxy
+        : `${baseUrl}/play/${torrent.id}?dl=${dlParam}&imdb=${imdbParam}${season && episode ? `&s=${season}&e=${episode}` : ''}`,  // ⏳ proxy
       behaviorHints: { notWebReady: !(isCached && streamUrl), bingeGroup: 'ncore-debrid' }
     })
   }
@@ -526,7 +528,9 @@ app.use(getRouter(stremioInterface))
 app.get('/play/:torrentId', async (req, res) => {
   const { torrentId } = req.params
   const downloadUrl = req.query.dl ? decodeURIComponent(req.query.dl) : null
-  console.log(`[PLAY] Kérés: torrentId=${torrentId}${downloadUrl ? ' (+dl)' : ''}`)
+  const season = req.query.s ? parseInt(req.query.s) : null
+  const episode = req.query.e ? parseInt(req.query.e) : null
+  console.log(`[PLAY] Keres: torrentId=${torrentId}${downloadUrl ? ' (+dl)' : ''}${season ? ` S${season}E${episode}` : ''}`)
 
   try {
     if (!ncore.isLoggedIn()) {
@@ -540,7 +544,7 @@ app.get('/play/:torrentId', async (req, res) => {
     console.log(`[PLAY] buffer: ${torrentBuffer.length} byte, info_hash: ${debrid._parseInfoHash(torrentBuffer)?.slice(0, 12) || 'NULL'}`)
 
     console.log(`[PLAY] Debrid-Link: ${torrentId}`)
-    const result = await debrid.addTorrentFile(torrentBuffer)
+    const result = await debrid.addTorrentFile(torrentBuffer, season, episode)
     if (!result) {
       return res.status(502).json({ error: 'Debrid-Link hiba (maxTorrent?)' })
     }
@@ -552,7 +556,7 @@ app.get('/play/:torrentId', async (req, res) => {
 
     if (result.torrentId) {
       console.log(`[PLAY] ⏳ Várakozás: ${result.torrentId}`)
-      const waitResult = await debrid.waitForTorrent(result.torrentId)
+      const waitResult = await debrid.waitForTorrent(result.torrentId, season, episode)
       if (waitResult && waitResult.streamUrl) {
         console.log(`[PLAY] ✅ Stream URL: ${waitResult.streamUrl.slice(0, 60)}...`)
         return res.redirect(302, waitResult.streamUrl)
