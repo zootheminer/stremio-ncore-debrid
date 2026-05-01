@@ -29,6 +29,7 @@ const CATALOG_PAGES_MOVIE = config.catalogPages?.movie ?? 3
 const CATALOG_PAGES_SERIES = config.catalogPages?.series ?? 3
 const STREAM_MAX_CANDIDATES = config.stream?.maxCandidates ?? 10
 const STREAM_MAX_UNCACHED_WAIT = config.stream?.maxUncachedToWait ?? 2
+const CHECK_GLOBAL_CACHE = config.stream?.checkGlobalCache === true
 
 // ─── Környezeti változók ─────────────────────────────────────────
 const PORT = process.env.PORT || 7000
@@ -79,7 +80,7 @@ function getCatalogPages(type) {
 // ─── Addon Builder ───────────────────────────────────────────────
 const builder = new addonBuilder({
   id: 'io.github.ncore-debrid',
-  version: '1.10.0',
+  version: '1.11.0',
   name: 'nCore + Debrid-Link',
   description: 'nCore torrent kereső + Debrid-Link streaming. Filmek és sorozatok magyar torrentekből.',
   logo: 'https://ncore.pro/favicon.ico',
@@ -182,12 +183,13 @@ builder.defineStreamHandler(async ({ type, id }) => {
           if (buf) {
             const result = await debrid.checkCache(buf)
             const isCached = result && result.cached && result.streamUrl
+            const cacheType = isCached ? 'personal' : null
             console.log(`[STREAM] ${isCached ? '✅' : '⏳'} Cache: ${name.substring(0, 40)}`)
             return { streams: [{
               name: 'nCore',
               title: [
                 name.substring(0, 55),
-                `📦 ? · 🌱 ? · ${isCached ? '⚡' : '⏳'}`
+                `📦 ? · 🌱 ? · ${cacheType === 'personal' ? '⚡' : '⏳'}`
               ].join('\n'),
               url: isCached ? result.streamUrl : `${PUBLIC_URL}/play/${torrentId}`,
               behaviorHints: { notWebReady: !isCached, bingeGroup: 'ncore-debrid' }
@@ -289,11 +291,11 @@ builder.defineStreamHandler(async ({ type, id }) => {
 })
 
 // ─── Segéd: stream cím formázás ──────────────────────────────────
-function makeStreamDisplay(torrent, isCached, season, episode) {
+function makeStreamDisplay(torrent, isCached, cacheType, season, episode) {
   const qual = torrent.resolution || torrent.quality || ''
   const lang = torrent.language || ''
   const flag = { 'HUN': '🇭🇺', 'ENG': '🇬🇧', 'MULTi': '🌍', 'HUN+ENG': '🇭🇺+🇬🇧' }[lang] || ''
-  const cacheIcon = isCached ? '⚡' : '⏳'
+  const cacheIcon = cacheType === 'personal' ? '⚡' : cacheType === 'global' ? '🌐' : '⏳'
   
   const name = torrent.title
     .replace(/\./g, ' ')
@@ -378,9 +380,12 @@ async function checkAllTorrents(candidates, season, episode, imdbId) {
   const baseUrl = PUBLIC_URL || `http://localhost:${PORT}`
 
   // 1. Info_hash beszerzése: cache-ből, vagy .torrent letöltéssel (top 3)
+  //    Ha CHECK_GLOBAL_CACHE be van kapcsolva, mindig letöltjük a .torrent fájlt
+  //    (mert kell a buffer a globális cache ellenőrzéshez)
   const top3 = topCandidates.slice(0, 3)
   const hashResults = await Promise.allSettled(top3.map(async (t) => {
-    if (hashCache[t.id]) return { torrentId: t.id, infoHash: hashCache[t.id] }
+    const needBuffer = CHECK_GLOBAL_CACHE  // globális cache check-hez mindig kell buffer
+    if (!needBuffer && hashCache[t.id]) return { torrentId: t.id, infoHash: hashCache[t.id], buffer: null }
     try {
       const buf = await ncore.downloadTorrent(t.id, t.downloadUrl)
       const infoHash = debrid._parseInfoHash(buf)
@@ -388,14 +393,16 @@ async function checkAllTorrents(candidates, season, episode, imdbId) {
         hashCache[t.id] = infoHash
         saveHashCache()
       }
-      return { torrentId: t.id, infoHash }
-    } catch (_) { return { torrentId: t.id, infoHash: null } }
+      return { torrentId: t.id, infoHash, buffer: needBuffer ? buf : null }
+    } catch (_) { return { torrentId: t.id, infoHash: null, buffer: null } }
   }))
 
   const hashes = {}
+  const buffers = {}  // buffer-ek a globális cache ellenőrzéshez
   for (const r of hashResults) {
     if (r.status === 'fulfilled' && r.value.infoHash) {
       hashes[r.value.torrentId] = r.value.infoHash
+      if (r.value.buffer) buffers[r.value.torrentId] = r.value.buffer
     }
   }
 
@@ -415,14 +422,17 @@ async function checkAllTorrents(candidates, season, episode, imdbId) {
   } catch (_) {}
 
   // 3. Státusz ellenőrzés és stream generálás
+  let globalCacheChecked = false  // csak 1x próbálkozunk
   for (const torrent of topCandidates) {
     let isCached = false
+    let cacheType = null  // 'personal', 'global', vagy null
     let streamUrl = null
     const th = hashes[torrent.id]
     if (th) {
       isCached = seedboxHashes.has(th.toLowerCase())
       // Ha cache-ben van, keressük ki a seedboxból a stream URL-t
       if (isCached) {
+        cacheType = 'personal'
         const cachedTorrent = seedboxData.find(t => 
           t.hashString && t.hashString.toLowerCase() === th.toLowerCase() && t.downloadPercent === 100
         )
@@ -432,7 +442,21 @@ async function checkAllTorrents(candidates, season, episode, imdbId) {
       }
     }
     
-    const display = makeStreamDisplay(torrent, isCached, season, episode)
+    // Globális cache ellenőrzés (csak a legjobb ⏳ kandidátusra)
+    if (!isCached && CHECK_GLOBAL_CACHE && !globalCacheChecked && th && buffers[torrent.id]) {
+      console.log(`[STREAM] Globális cache ellenőrzés: ${torrent.title.substring(0, 40)}...`)
+      const globalResult = await debrid.checkGlobalCache(buffers[torrent.id])
+      if (globalResult && globalResult.cached && globalResult.streamUrl) {
+        isCached = true
+        cacheType = 'global'
+        streamUrl = globalResult.streamUrl
+        console.log(`[STREAM] ✅ Globális cache-ben: ${torrent.title.substring(0, 40)}`)
+      }
+      globalCacheChecked = true
+      delete buffers[torrent.id]  // takarítás
+    }
+    
+    const display = makeStreamDisplay(torrent, isCached, cacheType, season, episode)
     const dlParam = encodeURIComponent(torrent.downloadUrl || '')
     const imdbParam = encodeURIComponent(imdbId || '')
     streams.push({
@@ -511,7 +535,7 @@ app.get('/play/:torrentId', async (req, res) => {
 })
 
 app.listen(PORT, () => {
-  console.log(`\n🎬 nCore + Debrid-Link Stremio Addon v1.10.0`)
+  console.log(`\n🎬 nCore + Debrid-Link Stremio Addon v1.11.0`)
   console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
   console.log(`   Szerver: http://localhost:${PORT}`)
   console.log(`   Manifest: http://localhost:${PORT}/manifest.json`)

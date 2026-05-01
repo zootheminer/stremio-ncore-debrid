@@ -278,7 +278,7 @@ class NcoreClient {
     return data.results
       .filter(t => parseInt(t.seeders) >= minSeeders)
       .map(t => {
-        const quality = this._parseQuality(t.release_name || '')
+        const quality = this._parseQuality(t.release_name || '', t.category)
         return {
           id: t.torrent_id,
           title: t.release_name,
@@ -304,8 +304,10 @@ class NcoreClient {
   /**
    * Minőség és nyelv kinyerése a torrent címből
    * Pl: "Titanic.1997.HUN.BDRiP.x264-DWP" -> { quality: "BDRip", resolution: "1080p", language: "HUN", codec: "x264" }
+   * @param {string} title - Torrent release name
+   * @param {string} [category] - nCore kategória (pl. hd_hun, xvidser) — fallback nyelv detektáláshoz
    */
-  _parseQuality(title) {
+  _parseQuality(title, category) {
     const upper = title.toUpperCase()
     const result = { quality: null, resolution: null, language: null, hasHungarian: false, hasEnglish: false }
 
@@ -338,6 +340,17 @@ class NcoreClient {
     else if (result.hasHungarian && result.hasEnglish) result.language = 'HUN+ENG'
     else if (result.hasHungarian) result.language = 'HUN'
     else if (result.hasEnglish) result.language = 'ENG'
+
+    // Fallback: ha a címből nem derül ki a nyelv, próbáljuk kategória alapján
+    if (!result.language && category) {
+      if (category.endsWith('_hun')) {
+        result.language = 'HUN'
+        result.hasHungarian = true
+      } else if (['xvid','dvd','dvd9','hd','xvidser','dvdser','hdser'].includes(category)) {
+        result.language = 'ENG'
+        result.hasEnglish = true
+      }
+    }
 
     return result
   }

@@ -230,6 +230,99 @@ class DebridClient {
   }
 
   /**
+   * Torrent törlése a Debrid-Link seedbox-ból.
+   * Használjuk: globális cache ellenőrzés után takarításhoz.
+   */
+  async deleteTorrent(torrentId) {
+    try {
+      const res = await this.client.delete(`/seedbox/${torrentId}/delete`)
+      return res.data?.success === true
+    } catch (err) {
+      console.warn('[DEBRID] Törlési hiba:', torrentId, err.message)
+      return false
+    }
+  }
+
+  /**
+   * Globális cache ellenőrzés.
+   * Feltölti a .torrent fájlt, és megnézi, hogy a Debrid-Link globális
+   * cache-ében van-e (azonnali 100%). Ha nincs, törli a seedbox-ból
+   * (nem foglal slot-ot feleslegesen).
+   * 
+   * @param {Buffer} torrentBuffer - .torrent fájl tartalma
+   * @returns {object|null} - { cached: true, streamUrl } vagy { cached: false }
+   */
+  async checkGlobalCache(torrentBuffer) {
+    // 1. Először nézzük a saját seedbox-ot (gyors, nincs feltöltés)
+    const infoHash = this._parseInfoHash(torrentBuffer)
+    if (infoHash) {
+      const existing = await this._findByHash(infoHash)
+      if (existing && existing.downloadPercent === 100) {
+        console.log('[DEBRID] ✅ Már a saját seedbox-ban van!')
+        const streamUrl = await this._getDownloadLink(existing.files)
+        if (streamUrl) return { cached: true, streamUrl }
+      }
+    }
+
+    // 2. Feltöltés → megnézzük, hogy globális cache-ben van-e
+    console.log('[DEBRID] Globális cache ellenőrzés...')
+    try {
+      const FormData = require('form-data')
+      const form = new FormData()
+      form.append('file', torrentBuffer, {
+        filename: 'torrent.torrent',
+        contentType: 'application/x-bittorrent'
+      })
+
+      const addRes = await this.client.post('/seedbox/add', form, {
+        headers: {
+          ...form.getHeaders(),
+          'Authorization': `Bearer ${this.apiKey}`
+        },
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+        timeout: 30000
+      })
+
+      const data = addRes.data
+      if (!data.success || !data.value) {
+        console.log('[DEBRID] ⚠️ Globális cache ellenőrzés: API hiba')
+        return { cached: false }
+      }
+
+      const tv = data.value
+      const torrentId = tv.id
+
+      if (tv.downloadPercent === 100) {
+        console.log('[DEBRID] ✅ Globális cache-ben van!')
+        const streamUrl = await this._getDownloadLink(tv.files)
+        if (streamUrl) {
+          // Megvan → töröljük a seedbox-ból (nem kell, stream URL van)
+          await this.deleteTorrent(torrentId)
+          return { cached: true, streamUrl }
+        }
+      }
+
+      // Nincs cache-ben → töröljük (nem foglal slot-ot)
+      console.log('[DEBRID] ⏳ Nincs globális cache-ben, törlés...')
+      await this.deleteTorrent(torrentId)
+      return { cached: false }
+
+    } catch (err) {
+      console.error('[DEBRID] Globális cache hiba:', err.message)
+      if (err.response) {
+        const errCode = err.response.data?.error
+        if (errCode === 'maxTorrent') {
+          console.log('[DEBRID] ⚠️ Seedbox tele, globális cache ellenőrzés kihagyva')
+        } else {
+          console.error('[DEBRID]   API:', err.response.status, JSON.stringify(err.response.data).slice(0, 300))
+        }
+      }
+      return { cached: false }
+    }
+  }
+
+  /**
    * Info_hash kinyerése .torrent fájlból
    * 
    * Megbízható bencoding parser: byte-szinten dolgozik, és helyesen kezeli
