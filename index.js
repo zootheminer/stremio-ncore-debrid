@@ -411,6 +411,7 @@ function saveHashCache() {
 
 async function checkAllTorrents(candidates, season, episode, imdbId) {
   const baseUrl = PUBLIC_URL || `http://localhost:${PORT}`
+  const streams = []
 
   // 0. Globális cache ellenőrzés (ha be van kapcsolva)
   if (CHECK_GLOBAL_CACHE && candidates.length > 0) {
@@ -422,14 +423,13 @@ async function checkAllTorrents(candidates, season, episode, imdbId) {
         if (globalResult.cached && globalResult.streamUrl) {
           console.log(`[STREAM] ✅ Globális cache-ben: ${top.title.substring(0, 40)}`)
           const display = makeStreamDisplay(top, true, 'global', season, episode)
-          return {
-            streams: [{
-              name: display.name,
-              title: display.title,
-              url: globalResult.streamUrl,
-              behaviorHints: { notWebReady: false, bingeGroup: 'ncore-debrid' }
-            }]
-          }
+          streams.push({
+            name: display.name,
+            title: display.title,
+            url: globalResult.streamUrl,
+            behaviorHints: { notWebReady: false, bingeGroup: 'ncore-debrid' }
+          })
+          // Folytatjuk a többi jelölttel, ne return-oljunk!
         }
       }
     } catch (e) {
@@ -437,12 +437,9 @@ async function checkAllTorrents(candidates, season, episode, imdbId) {
     }
   }
 
-  const topCandidates = candidates.slice(0, 5)
-  const streams = []
-
-  // 1. Info_hash beszerzése: cache-ből, vagy .torrent letöltéssel (top 3)
-  const top3 = topCandidates.slice(0, 3)
-  const hashResults = await Promise.allSettled(top3.map(async (t) => {
+  // 1. Info_hash beszerzése: cache-ből, vagy .torrent letöltéssel (top 5)
+  const top5 = candidates.slice(0, 5)
+  const hashResults = await Promise.allSettled(top5.map(async (t) => {
     if (hashCache[t.id]) return { torrentId: t.id, infoHash: hashCache[t.id] }
     try {
       const buf = await ncore.downloadTorrent(t.id, t.downloadUrl)
