@@ -579,7 +579,7 @@ app.get('/play/:torrentId', async (req, res) => {
 })
 
 app.listen(PORT, () => {
-  console.log(`\n🎬 nCore + Debrid-Link Stremio Addon v1.11.0`)
+  console.log(`\n🎬 nCore + Debrid-Link Stremio Addon v1.16.1`)
   console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
   console.log(`   Szerver: http://localhost:${PORT}`)
   console.log(`   Manifest: http://localhost:${PORT}/manifest.json`)
