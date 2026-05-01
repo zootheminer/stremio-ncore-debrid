@@ -81,7 +81,7 @@ Every setting in `config.json` controls how the addon behaves. Below is a comple
   "seedLimits": { "movie": 50, "series": 20 },
   "catalogLimits": { "movie": 50, "series": 50 },
   "catalogPages": { "movie": 2, "series": 2 },
-  "stream": { "maxCandidates": 10, "maxUncachedToWait": 2 }
+  "stream": { "checkGlobalCache": true, "maxCandidates": 10, "maxUncachedToWait": 2 }
 }
 ```
 
@@ -167,6 +167,39 @@ Every setting in `config.json` controls how the addon behaves. Below is a comple
 **How it works:** This limits how many ⏳ candidates are shown before the addon stops checking. If `maxUncachedToWait` is 2, and the addon has already found 2 uncached torrents, any further candidates are still shown but flagged as uncached.
 
 **Current status:** This field is **reserved for future use**. Currently, the addon checks all candidates regardless of this limit. The limit will affect behavior once the /play endpoint properly handles queuing (e.g. showing a "waiting" state for uncached torrents).
+
+---
+
+##### `stream.checkGlobalCache`
+
+| Field | Default | What it does |
+|---|---|---|
+| `checkGlobalCache` | `true` | When enabled, the addon attempts to upload the `.torrent` file to Debrid-Link to check if it exists in the **global cache** (i.e., someone else has previously downloaded it). |
+
+**How it works:** When you browse a movie or series, the addon checks your personal seedbox for cached torrents (⚡). Torrents not in your seedbox are shown as ⏳. If `checkGlobalCache` is enabled, the addon additionally:
+
+1. Uploads the `.torrent` file of the **top ⏳ candidate** to Debrid-Link
+2. If Debrid-Link responds with `downloadPercent: 100` → the torrent exists in the **global cache** → shows 🌐 with a direct stream URL
+3. If NOT globally cached → **immediately deletes** the torrent from the seedbox → stays ⏳
+4. Only the top candidate is checked (one upload per stream request), to avoid hitting API rate limits
+
+**Does this consume seedbox slots?** No. If the torrent is globally cached, it's deleted from the seedbox after retrieving the stream URL. If it's not cached, it's also deleted. The upload is purely for cache detection, not for seeding.
+
+**Limitations:**
+- Requires at least **one free slot** in your Debrid-Link seedbox (max 100 torrents). If your seedbox is full, the check is skipped.
+- Adds ~1-2 seconds to the stream loading time (one upload per request).
+- The 🌐 badge means **some Debrid-Link user** has this cached — playback should start quickly, but may be slower than ⚡.
+
+**Why disable it?**
+- To save API calls / avoid rate limiting
+- If you prefer only ⚡ (your own seedbox) to indicate instant availability
+- If your seedbox is frequently full and the check always fails anyway
+
+**Console log example:**
+```
+[STREAM] Globális cache ellenőrzés: For All Mankind S01...
+[DEBRID] ✅ Globális cache-ben van!
+```
 
 ---
 
