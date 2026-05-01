@@ -353,28 +353,39 @@ function makeStreamDisplay(torrent, isCached, cacheType, season, episode) {
 function filterByEpisode(torrents, season, episode) {
   if (!season) return torrents
   
-  const patterns = []
-  // S01E01, S1E1, S01.E01, stb.
-  const s1 = String(season)
   const s2 = String(season).padStart(2, '0')
-  const e1 = String(episode)
-  const e2 = String(episode).padStart(2, '0')
+  const e2 = episode ? String(episode).padStart(2, '0') : null
   
-  if (episode) {
-    patterns.push(new RegExp(`[Ss]${s1}[Ee]${e1}`, 'i'))
-    patterns.push(new RegExp(`[Ss]${s2}[Ee]${e2}`, 'i'))
-    patterns.push(new RegExp(`[Ss]${s1}\\.?[Ee]${e1}`, 'i'))
-    patterns.push(new RegExp(`[Ss]${s2}\\.?[Ee]${e2}`, 'i'))
+  // 1. fázis: pontos epizód keresés (S05E01, S05.E01, S05 E01, 5x01)
+  if (episode && e2) {
+    const exactPatterns = [
+      new RegExp(`[Ss]${s2}[Ee]${e2}(\\b|[^\\d])`),       // S05E01 (nem S05E019)
+      new RegExp(`[Ss]${s2}\\.[Ee]${e2}(\\b|[^\\d])`),     // S05.E01
+      new RegExp(`[Ss]${s2}[\\s._-][Ee]${e2}(\\b|[^\\d])`), // S05 E01, S05_E01
+      new RegExp(`${s2}x${e2}(\\b|[^\\d])`, 'i'),           // 5x01
+      new RegExp(`[Ee]p?${e2}(\\b|[^\\d])`, 'i')            // Episode 01, Ep01, E01
+    ]
+    const exact = torrents.filter(t => exactPatterns.some(p => p.test(t.title)))
+    if (exact.length > 0) {
+      console.log(`[STREAM] Epizód szűrés: ${torrents.length} → ${exact.length} (pontos: S${s2}E${e2})`)
+      return exact
+    }
   }
-  // S01 vagy S01 complete
-  patterns.push(new RegExp(`[Ss]${s2}`, 'i'))
   
-  const filtered = torrents.filter(t =>
-    patterns.some(p => p.test(t.title))
-  )
+  // 2. fázis: évad alapú keresés (S05, 5. évad, Season 5)
+  const seasonPatterns = [
+    new RegExp(`[Ss]${s2}\\b`, 'i'),          // S05 (szóhatárral)
+    new RegExp(`[Ss]eason\\s*${season}`, 'i'), // Season 5
+    new RegExp(`${season}\\.\\s*[Ee]vad`, 'i') // 5. évad
+  ]
+  const seasonMatch = torrents.filter(t => seasonPatterns.some(p => p.test(t.title)))
+  if (seasonMatch.length > 0) {
+    console.log(`[STREAM] Epizód szűrés: ${torrents.length} → ${seasonMatch.length} (évad: S${s2})`)
+    return seasonMatch
+  }
   
-  if (filtered.length > 0) return filtered
-  return torrents // ha nincs pontos egyezés, visszaadjuk az összeset
+  // 3. fázis: nincs egyezés → teljes listát adjuk vissza
+  console.log(`[STREAM] Epizód szűrés: ${torrents.length} → ${torrents.length} (nincs egyezés)`)
 }
 
 // ─── Segéd: IMDB ID kinyerése (sorozatoknál :season:episode levágása)
