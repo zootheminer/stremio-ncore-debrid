@@ -150,9 +150,7 @@ class DebridClient {
       const finalInfo = await this._waitForSeed(torrentId)
       if (!finalInfo) throw new Error('Debrid-Link timeout')
 
-      const streamUrl = await (season && episode
-          ? this._getDownloadLinkByEpisode(finalInfo.files, season, episode)
-          : this._getDownloadLink(finalInfo.files))
+      const streamUrl = await this._getDownloadLink(finalInfo.files)
       if (!streamUrl) throw new Error('Nem sikerült stream URL-t generálni')
 
       return { torrentId, streamUrl, files: finalInfo.files }
@@ -210,9 +208,7 @@ class DebridClient {
       }
 
       // 3. Stream URL
-      const streamUrl = await (season && episode
-          ? this._getDownloadLinkByEpisode(finalInfo.files, season, episode)
-          : this._getDownloadLink(finalInfo.files))
+      const streamUrl = await this._getDownloadLink(finalInfo.files)
       if (!streamUrl) {
         throw new Error('Nem sikerült stream URL-t generálni')
       }
@@ -306,9 +302,7 @@ class DebridClient {
 
       if (tv.downloadPercent === 100) {
         console.log('[DEBRID] ✅ Globális cache-ben van!')
-        const streamUrl = await (season && episode
-          ? this._getDownloadLinkByEpisode(tv.files, season, episode)
-          : this._getDownloadLink(tv.files))
+        const streamUrl = await this._getDownloadLink(tv.files)
         if (streamUrl) {
           // Megvan → töröljük a seedbox-ból (nem kell, stream URL van)
           await this.deleteTorrent(torrentId)
