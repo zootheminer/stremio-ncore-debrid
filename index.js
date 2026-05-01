@@ -482,7 +482,7 @@ async function checkAllTorrents(candidates, season, episode, imdbId) {
     // Globális cache ellenőrzés (csak a legjobb ⏳ kandidátusra)
     if (!isCached && CHECK_GLOBAL_CACHE && !globalCacheChecked && th && buffers[torrent.id]) {
       console.log(`[STREAM] Globális cache ellenőrzés: ${torrent.title.substring(0, 40)}...`)
-      const globalResult = await debrid.checkGlobalCache(buffers[torrent.id])
+      const globalResult = await debrid.checkGlobalCache(buffers[torrent.id], season, episode)
       if (globalResult && globalResult.cached && globalResult.streamUrl) {
         isCached = true
         cacheType = 'global'

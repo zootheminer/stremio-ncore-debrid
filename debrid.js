@@ -257,16 +257,20 @@ class DebridClient {
    * (nem foglal slot-ot feleslegesen).
    * 
    * @param {Buffer} torrentBuffer - .torrent fájl tartalma
+   * @param {number} [season] - Évad (season pack esetén)
+   * @param {number} [episode] - Epizód (season pack esetén)
    * @returns {object|null} - { cached: true, streamUrl } vagy { cached: false }
    */
-  async checkGlobalCache(torrentBuffer) {
+  async checkGlobalCache(torrentBuffer, season, episode) {
     // 1. Először nézzük a saját seedbox-ot (gyors, nincs feltöltés)
     const infoHash = this._parseInfoHash(torrentBuffer)
     if (infoHash) {
       const existing = await this._findByHash(infoHash)
       if (existing && existing.downloadPercent === 100) {
         console.log('[DEBRID] ✅ Már a saját seedbox-ban van!')
-        const streamUrl = await this._getDownloadLink(existing.files)
+        const streamUrl = await (season && episode
+          ? this._getDownloadLinkByEpisode(existing.files, season, episode)
+          : this._getDownloadLink(existing.files))
         if (streamUrl) return { cached: true, streamUrl }
       }
     }
@@ -302,7 +306,9 @@ class DebridClient {
 
       if (tv.downloadPercent === 100) {
         console.log('[DEBRID] ✅ Globális cache-ben van!')
-        const streamUrl = await this._getDownloadLink(tv.files)
+        const streamUrl = await (season && episode
+          ? this._getDownloadLinkByEpisode(tv.files, season, episode)
+          : this._getDownloadLink(tv.files))
         if (streamUrl) {
           // Megvan → töröljük a seedbox-ból (nem kell, stream URL van)
           await this.deleteTorrent(torrentId)
