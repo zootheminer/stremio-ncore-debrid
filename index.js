@@ -80,7 +80,7 @@ function getCatalogPages(type) {
 // ─── Addon Builder ───────────────────────────────────────────────
 const builder = new addonBuilder({
   id: 'io.github.ncore-debrid',
-  version: '1.11.0',
+  version: '1.16.1',
   name: 'nCore + Debrid-Link',
   description: 'nCore torrent kereső + Debrid-Link streaming. Filmek és sorozatok magyar torrentekből.',
   logo: 'https://ncore.pro/favicon.ico',
