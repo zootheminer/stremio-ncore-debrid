@@ -415,12 +415,9 @@ async function checkAllTorrents(candidates, season, episode, imdbId) {
   const baseUrl = PUBLIC_URL || `http://localhost:${PORT}`
 
   // 1. Info_hash beszerzése: cache-ből, vagy .torrent letöltéssel (top 3)
-  //    Ha CHECK_GLOBAL_CACHE be van kapcsolva, mindig letöltjük a .torrent fájlt
-  //    (mert kell a buffer a globális cache ellenőrzéshez)
   const top3 = topCandidates.slice(0, 3)
   const hashResults = await Promise.allSettled(top3.map(async (t) => {
-    const needBuffer = CHECK_GLOBAL_CACHE  // globális cache check-hez mindig kell buffer
-    if (!needBuffer && hashCache[t.id]) return { torrentId: t.id, infoHash: hashCache[t.id], buffer: null }
+    if (hashCache[t.id]) return { torrentId: t.id, infoHash: hashCache[t.id] }
     try {
       const buf = await ncore.downloadTorrent(t.id, t.downloadUrl)
       const infoHash = debrid._parseInfoHash(buf)
@@ -428,16 +425,14 @@ async function checkAllTorrents(candidates, season, episode, imdbId) {
         hashCache[t.id] = infoHash
         saveHashCache()
       }
-      return { torrentId: t.id, infoHash, buffer: needBuffer ? buf : null }
-    } catch (_) { return { torrentId: t.id, infoHash: null, buffer: null } }
+      return { torrentId: t.id, infoHash, buffer: null }
+    } catch (_) { return { torrentId: t.id, infoHash: null } }
   }))
 
   const hashes = {}
-  const buffers = {}  // buffer-ek a globális cache ellenőrzéshez
   for (const r of hashResults) {
     if (r.status === 'fulfilled' && r.value.infoHash) {
       hashes[r.value.torrentId] = r.value.infoHash
-      if (r.value.buffer) buffers[r.value.torrentId] = r.value.buffer
     }
   }
 
@@ -457,15 +452,13 @@ async function checkAllTorrents(candidates, season, episode, imdbId) {
   } catch (_) {}
 
   // 3. Státusz ellenőrzés és stream generálás
-  let globalCacheChecked = false  // csak 1x próbálkozunk
   for (const torrent of topCandidates) {
     let isCached = false
-    let cacheType = null  // 'personal', 'global', vagy null
+    let cacheType = null
     let streamUrl = null
     const th = hashes[torrent.id]
     if (th) {
       isCached = seedboxHashes.has(th.toLowerCase())
-      // Ha cache-ben van, keressük ki a seedboxból a stream URL-t
       if (isCached) {
         cacheType = 'personal'
         const cachedTorrent = seedboxData.find(t => 
@@ -477,20 +470,6 @@ async function checkAllTorrents(candidates, season, episode, imdbId) {
             : debrid._getDownloadLink(cachedTorrent.files))
         }
       }
-    }
-    
-    // Globális cache ellenőrzés (csak a legjobb ⏳ kandidátusra)
-    if (!isCached && CHECK_GLOBAL_CACHE && !globalCacheChecked && th && buffers[torrent.id]) {
-      console.log(`[STREAM] Globális cache ellenőrzés: ${torrent.title.substring(0, 40)}...`)
-      const globalResult = await debrid.checkGlobalCache(buffers[torrent.id], season, episode)
-      if (globalResult && globalResult.cached && globalResult.streamUrl) {
-        isCached = true
-        cacheType = 'global'
-        streamUrl = globalResult.streamUrl
-        console.log(`[STREAM] ✅ Globális cache-ben: ${torrent.title.substring(0, 40)}`)
-      }
-      globalCacheChecked = true
-      delete buffers[torrent.id]  // takarítás
     }
     
     const display = makeStreamDisplay(torrent, isCached, cacheType, season, episode)
