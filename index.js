@@ -304,25 +304,29 @@ function makeStreamDisplay(torrent, isCached, cacheType, season, episode) {
   
   const lines = []
   
-  // 1. sor: név
+  // 1. sor: zászló + felbontás (az nCore ⚡/🌐/⏳ név alatt)
+  const topParts = []
+  if (flag) topParts.push(flag)
+  if (qual) topParts.push(qual)
+  if (topParts.length > 0) lines.push(topParts.join(' · '))
+  
+  // 2. sor: stream név
   lines.push(name)
   
-  // 2. sor: S01E01 (sorozat) · 🇭🇺 · 1080p · 📦méret
+  // 3. sor: S01E01 (sorozat) · 📦méret
   const infoParts = []
   if (season && episode) {
     const s = String(season).padStart(2, '0')
     const e = String(episode).padStart(2, '0')
     infoParts.push(`S${s}E${e}`)
   }
-  if (flag) infoParts.push(flag)
-  if (qual) infoParts.push(qual)
   if (torrent.size && torrent.size !== '?') infoParts.push(`📦${torrent.size}`)
   if (infoParts.length > 0) lines.push(infoParts.join(' · '))
   
-  // 3. sor: 🌱 seed
+  // 4. sor: 🌱 seed
   lines.push(`🌱 ${torrent.seeders}`)
   
-  return { title: lines.join('\n') }
+  return { title: lines.join('\\n') }
 }
 
 // ─── Segéd: sorozat epizód szűrés ───────────────────────────────
