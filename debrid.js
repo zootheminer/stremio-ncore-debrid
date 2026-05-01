@@ -310,8 +310,7 @@ class DebridClient {
           ? this._getDownloadLinkByEpisode(tv.files, season, episode)
           : this._getDownloadLink(tv.files))
         if (streamUrl) {
-          // Megvan → töröljük a seedbox-ból (nem kell, stream URL van)
-          await this.deleteTorrent(torrentId)
+          // Megvan → megtartjuk a seedboxban (legközelebb ⚡)
           return { cached: true, streamUrl }
         }
       }
