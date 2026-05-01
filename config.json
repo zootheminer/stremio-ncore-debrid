@@ -1,15 +1,15 @@
 {
   "seedLimits": {
-    "movie": 50,
-    "series": 20
+    "movie": 300,
+    "series": 200
   },
   "catalogLimits": {
-    "movie": 50,
-    "series": 50
+    "movie": 100,
+    "series": 100
   },
   "catalogPages": {
-    "movie": 2,
-    "series": 2
+    "movie": 3,
+    "series": 3
   },
   "stream": {
     "checkGlobalCache": true,

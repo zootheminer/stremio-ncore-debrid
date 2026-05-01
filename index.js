@@ -186,10 +186,10 @@ builder.defineStreamHandler(async ({ type, id }) => {
             const cacheType = isCached ? 'personal' : null
             console.log(`[STREAM] ${isCached ? '✅' : '⏳'} Cache: ${name.substring(0, 40)}`)
             return { streams: [{
-              name: 'nCore',
+              name: cacheType === 'personal' ? 'nCore ⚡' : 'nCore ⏳',
               title: [
                 name.substring(0, 55),
-                `📦 ? · 🌱 ? · ${cacheType === 'personal' ? '⚡' : '⏳'}`
+                `📦 ? · 🌱 ?`
               ].join('\n'),
               url: isCached ? result.streamUrl : `${PUBLIC_URL}/play/${torrentId}`,
               behaviorHints: { notWebReady: !isCached, bingeGroup: 'ncore-debrid' }
@@ -319,8 +319,8 @@ function makeStreamDisplay(torrent, isCached, cacheType, season, episode) {
   if (torrent.size && torrent.size !== '?') infoParts.push(`📦${torrent.size}`)
   if (infoParts.length > 0) lines.push(infoParts.join(' · '))
   
-  // 3. sor: 🌱 seed · ⚡/⏳
-  lines.push(`🌱 ${torrent.seeders} · ${cacheIcon}`)
+  // 3. sor: 🌱 seed
+  lines.push(`🌱 ${torrent.seeders}`)
   
   return { title: lines.join('\n') }
 }
@@ -460,7 +460,7 @@ async function checkAllTorrents(candidates, season, episode, imdbId) {
     const dlParam = encodeURIComponent(torrent.downloadUrl || '')
     const imdbParam = encodeURIComponent(imdbId || '')
     streams.push({
-      name: 'nCore',
+      name: cacheType === 'personal' ? 'nCore ⚡' : cacheType === 'global' ? 'nCore 🌐' : 'nCore ⏳',
       title: display.title,
       url: isCached && streamUrl 
         ? streamUrl  // ⚡ közvetlen Debrid-Link URL
