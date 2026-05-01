@@ -65,14 +65,16 @@ cp .env.example .env
 # Required
 NCORE_USER=your_username
 NCORE_PASS=your_password
-DEBRID_API_KEY=your_api_key
+DEBRID_API_KEY=***      # Get it at https://debrid-link.com/api_doc/v2/
 
 # Optional
 PORT=7000
 PUBLIC_URL=https://your-domain.com/your-token
 ```
 
-Edit `config.json` to adjust limits:
+#### `config.json` — Detailed Settings Reference
+
+Every setting in `config.json` controls how the addon behaves. Below is a complete reference with explanations and trade-offs.
 
 ```json
 {
@@ -82,6 +84,119 @@ Edit `config.json` to adjust limits:
   "stream": { "maxCandidates": 10, "maxUncachedToWait": 2 }
 }
 ```
+
+##### `seedLimits`
+
+| Field | Default | What it does |
+|---|---|---|
+| `movie` | `50` | Minimum seeders for **movies** in the catalog and search results |
+| `series` | `20` | Minimum seeders for **series** in the catalog and search results |
+
+**How it works:** When the addon fetches torrents from nCore's JSON API, it filters the results and **discards any torrent with fewer seeders than this number**. This means only well-seeded (healthy) torrents appear in your Stremio catalog.
+
+> ⚠️ **Important:** This filter is applied **after** the API call, not before. nCore returns all matching results, and the addon strips the low-seeded ones. Higher values = fewer results but better quality (faster downloads on Debrid-Link).
+
+**Trade-offs:**
+- **Low values** (e.g. 5–20): More torrents shown, but some may have no seeders and can't be downloaded by Debrid-Link
+- **High values** (e.g. 100+): Only popular torrents shown, but might miss niche or old content
+- **Movie vs series:** Series torrents naturally have fewer seeders than movies, so the threshold is lower for series
+- **Advisory:** The minimum viable seeder count is 1 (Debrid-Link needs at least one seeder to start). Setting below 5 may result in many "stuck" torrents that never finish downloading on Debrid-Link
+
+---
+
+##### `catalogLimits`
+
+| Field | Default | What it does |
+|---|---|---|
+| `movie` | `50` | Maximum **movies** to show in the catalog |
+| `series` | `50` | Maximum **series** to show in the catalog |
+
+**How it works:** After filtering by seed count, the addon limits the catalog to at most this many items. The results are sorted by **upload date** (newest first).
+
+**Trade-offs:**
+- **Low values** (10–30): Smaller catalog but faster loading in Stremio
+- **High values** (100+): More content to browse, but may slow down the initial catalog load
+- The actual number may be lower if nCore has fewer uploads matching your seed threshold
+
+---
+
+##### `catalogPages`
+
+| Field | Default | What it does |
+|---|---|---|
+| `movie` | `2` | Number of nCore **result pages** to fetch for movies |
+| `series` | `2` | Number of nCore **result pages** to fetch for series |
+
+**How it works:** nCore's JSON API returns ~100 results per page. Setting `catalogPages` to `2` means the addon fetches 2 pages (~200 results), then filters by seed limit, then trims to `catalogLimits`.
+
+**Why you'd change this:** nCore sorts by upload date (`fid` = upload order). The newest torrents are on page 1. If the latest page doesn't have enough high-seeded torrents, fetching more pages older content may include more matches.
+
+**Example scenario:** Say your `seedLimits.movie` is 50 and `catalogLimits.movie` is 50, but page 1 only has 40 torrents above 50 seeders. With 2 pages, the addon fetches both pages (200 torrents total), and finds enough to fill the catalog limit.
+
+**Performance impact:** Each page adds ~1 second to the catalog request time (nCore API latency). Setting `catalogPages` above 3–4 is not recommended.
+
+---
+
+##### `stream.maxCandidates`
+
+| Field | Default | What it does |
+|---|---|---|
+| `maxCandidates` | `10` | Maximum number of stream options shown per movie/series |
+
+**How it works:** When you click on a movie or series, the addon finds all matching torrents on nCore, sorts them by **seed count** (highest first), and returns at most this many as stream options in Stremio.
+
+**Why you'd change this:**
+- **Low values** (3–5): Less cluttered stream list, only the best-seeded torrents
+- **High values** (10–20): More choices (different quality, language, release groups)
+- **Advisory:** Each candidate means downloading a `.torrent` file from nCore and computing its info_hash for cache checking. More candidates = more concurrent requests to nCore and slower stream loading
+
+**What gets checked for each candidate:**
+1. Addon downloads the .torrent file (for top 3 candidates)
+2. Computes info_hash using the custom bencode parser
+3. Compares against Debrid-Link's seedbox list (single API call for all)
+4. Returns ⚡ if cached (direct Debrid-Link URL) or ⏳ if not (play proxy URL)
+
+---
+
+##### `stream.maxUncachedToWait`
+
+| Field | Default | What it does |
+|---|---|---|
+| `maxUncachedToWait` | `2` | Maximum number of uncached (⏳) torrents that will wait for the user to select one |
+
+**How it works:** This limits how many ⏳ candidates are shown before the addon stops checking. If `maxUncachedToWait` is 2, and the addon has already found 2 uncached torrents, any further candidates are still shown but flagged as uncached.
+
+**Current status:** This field is **reserved for future use**. Currently, the addon checks all candidates regardless of this limit. The limit will affect behavior once the /play endpoint properly handles queuing (e.g. showing a "waiting" state for uncached torrents).
+
+---
+
+### Default Values
+
+If `config.json` is missing or a specific field is not set, the addon falls back to these built-in defaults:
+
+```json
+{
+  "seedLimits": { "movie": 300, "series": 200 },
+  "catalogLimits": { "movie": 100, "series": 100 },
+  "catalogPages": { "movie": 3, "series": 3 },
+  "stream": { "maxCandidates": 10, "maxUncachedToWait": 2 }
+}
+```
+
+These defaults are deliberately **conservative** (high seed limits, many pages) to ensure quality results on first run. The recommended values for typical usage are the ones in the example above (50/20 seed limits, 2 pages).
+
+---
+
+### Quick Reference: What to Tune
+
+| Problem | What to increase | What to decrease |
+|---|---|---|
+| Not enough movies in catalog | `catalogPages.movie`, `catalogLimits.movie` | `seedLimits.movie` |
+| Not enough series in catalog | `catalogPages.series`, `catalogLimits.series` | `seedLimits.series` |
+| Too many low-quality torrents | `seedLimits.movie`, `seedLimits.series` | — |
+| Stream list too slow to appear | — | `stream.maxCandidates` |
+| Too many stream options | — | `stream.maxCandidates` |
+| Missing older content | `catalogPages.movie` or `catalogPages.series` | `seedLimits`
 
 ### Run
 
