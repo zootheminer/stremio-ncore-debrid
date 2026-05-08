@@ -517,7 +517,6 @@ class DebridClient {
 
       if (matching.length > 0) videos = matching
     }
-
     const candidates = videos.length > 0 ? videos : files
     const sorted = [...candidates].sort((a, b) => (b.length || 0) - (a.length || 0))
     const biggest = sorted[0]

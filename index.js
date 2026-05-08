@@ -331,8 +331,8 @@ function filterByEpisode(torrents, season, episode) {
 
   const s1 = String(season)
   const s2 = String(season).padStart(2, '0')
-  const e1 = String(episode)
-  const e2 = String(episode).padStart(2, '0')
+  const e1 = episode ? String(episode) : null
+  const e2 = episode ? String(episode).padStart(2, '0') : null
 
   const patterns = []
   if (episode) {
@@ -340,15 +340,19 @@ function filterByEpisode(torrents, season, episode) {
     patterns.push(new RegExp(`[Ss]${s2}[Ee]${e2}`, 'i'))
     patterns.push(new RegExp(`[Ss]${s1}\\.?[Ee]${e1}`, 'i'))
     patterns.push(new RegExp(`[Ss]${s2}\\.?[Ee]${e2}`, 'i'))
+    patterns.push(new RegExp(`[Ss]${s2}\\.[Ee]${e2}(\\b|[^\\d])`, 'i'))
+    patterns.push(new RegExp(`[Ss]${s2}[\\s._-][Ee]${e2}(\\b|[^\\d])`, 'i'))
+    patterns.push(new RegExp(`${s2}x${e2}(\\b|[^\\d])`, 'i'))
+    patterns.push(new RegExp(`[Ee]p?${e2}(\\b|[^\\d])`, 'i'))
   }
-  // S01 (nem S01E01, hanem csak évad)
   patterns.push(new RegExp(`[Ss]${s2}(?:[^Ee\\d]|$)`, 'i'))
   patterns.push(new RegExp(`[Ss]${s1}(?:[^Ee\\d]|$)`, 'i'))
+  patterns.push(new RegExp(`[Ss]eason\\s*${season}`, 'i'))
+  patterns.push(new RegExp(`${season}\\.\\s*[Ee]vad`, 'i'))
 
   const filtered = torrents.filter(t => {
     if (patterns.some(p => p.test(t.title))) return true
 
-    // Range ellenőrzés: "S01-S10", "S01-10", "S01 - S10"
     const rangeMatch = t.title.match(/[Ss](\d+)\s*[-–]\s*[Ss]?(\d+)/)
     if (rangeMatch) {
       const start = parseInt(rangeMatch[1], 10)
@@ -356,7 +360,6 @@ function filterByEpisode(torrents, season, episode) {
       if (season >= start && season <= end) return true
     }
 
-    // "1-10 évad", "1-10 season"
     const rangeMatch2 = t.title.match(/(\d+)\s*[-–]\s*(\d+)\s*(évad|season)/i)
     if (rangeMatch2) {
       const start = parseInt(rangeMatch2[1], 10)
@@ -367,7 +370,10 @@ function filterByEpisode(torrents, season, episode) {
     return false
   })
 
-  if (filtered.length > 0) return filtered
+  if (filtered.length > 0) {
+    console.log(`[STREAM] Epizód szűrés: ${torrents.length} → ${filtered.length}`)
+    return filtered
+  }
   return torrents
 }
 
