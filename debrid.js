@@ -523,8 +523,6 @@ class DebridClient {
 
     // Ha nincs videó fájl, próbáljuk az összeset (fallback)
     const candidates = videos.length > 0 ? videos : files
-
-    // Legnagyobb fájl kiválasztása
     const sorted = [...candidates].sort((a, b) => (b.length || 0) - (a.length || 0))
     const biggest = sorted[0]
 

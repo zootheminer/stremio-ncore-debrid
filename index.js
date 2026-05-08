@@ -352,10 +352,9 @@ function makeStreamDisplay(torrent, isCached, cacheType, season, episode) {
 // ─── Segéd: sorozat epizód szűrés ───────────────────────────────
 function filterByEpisode(torrents, season, episode) {
   if (!season) return torrents
-  
   const s2 = String(season).padStart(2, '0')
   const e2 = episode ? String(episode).padStart(2, '0') : null
-  
+
   // 1. fázis: pontos epizód keresés (S05E01, S05.E01, S05 E01, 5x01)
   if (episode && e2) {
     const exactPatterns = [
@@ -371,7 +370,7 @@ function filterByEpisode(torrents, season, episode) {
       return exact
     }
   }
-  
+
   // 2. fázis: évad alapú keresés (S05, 5. évad, Season 5)
   const seasonPatterns = [
     new RegExp(`[Ss]${s2}\\b`, 'i'),          // S05 (szóhatárral)
@@ -383,9 +382,31 @@ function filterByEpisode(torrents, season, episode) {
     console.log(`[STREAM] Epizód szűrés: ${torrents.length} → ${seasonMatch.length} (évad: S${s2})`)
     return seasonMatch
   }
-  
+
+  // 2a. fázis: range alapú keresés (S01-S10, 1-10 évad/season)
+  const rangeResults = torrents.filter(t => {
+    const rangeMatch = t.title.match(/[Ss](\d+)\s*[-–]\s*[Ss]?(\d+)/)
+    if (rangeMatch) {
+      const start = parseInt(rangeMatch[1], 10)
+      const end = parseInt(rangeMatch[2], 10)
+      return season >= start && season <= end
+    }
+    const rangeMatch2 = t.title.match(/(\d+)\s*[-–]\s*(\d+)\s*(évad|season)/i)
+    if (rangeMatch2) {
+      const start = parseInt(rangeMatch2[1], 10)
+      const end = parseInt(rangeMatch2[2], 10)
+      return season >= start && season <= end
+    }
+    return false
+  })
+  if (rangeResults.length > 0) {
+    console.log(`[STREAM] Epizód szűrés: ${torrents.length} → ${rangeResults.length} (range: ${season})`)
+    return rangeResults
+  }
+
   // 3. fázis: nincs egyezés → teljes listát adjuk vissza
   console.log(`[STREAM] Epizód szűrés: ${torrents.length} → ${torrents.length} (nincs egyezés)`)
+  return torrents
 }
 
 // ─── Segéd: IMDB ID kinyerése (sorozatoknál :season:episode levágása)
