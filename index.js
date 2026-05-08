@@ -80,7 +80,7 @@ function getCatalogPages(type) {
 // ─── Addon Builder ───────────────────────────────────────────────
 const builder = new addonBuilder({
   id: 'io.github.ncore-debrid',
-  version: '1.16.1',
+  version: '1.11.0',
   name: 'nCore + Debrid-Link',
   description: 'nCore torrent kereső + Debrid-Link streaming. Filmek és sorozatok magyar torrentekből.',
   logo: 'https://ncore.pro/favicon.ico',
@@ -186,10 +186,10 @@ builder.defineStreamHandler(async ({ type, id }) => {
             const cacheType = isCached ? 'personal' : null
             console.log(`[STREAM] ${isCached ? '✅' : '⏳'} Cache: ${name.substring(0, 40)}`)
             return { streams: [{
-              name: cacheType === 'personal' ? 'nCore ⚡' : 'nCore ⏳',
+              name: 'nCore',
               title: [
                 name.substring(0, 55),
-                `📦 ? · 🌱 ?`
+                `📦 ? · 🌱 ? · ${cacheType === 'personal' ? '⚡' : '⏳'}`
               ].join('\n'),
               url: isCached ? result.streamUrl : `${PUBLIC_URL}/play/${torrentId}`,
               behaviorHints: { notWebReady: !isCached, bingeGroup: 'ncore-debrid' }
@@ -292,100 +292,83 @@ builder.defineStreamHandler(async ({ type, id }) => {
 
 // ─── Segéd: stream cím formázás ──────────────────────────────────
 function makeStreamDisplay(torrent, isCached, cacheType, season, episode) {
+  const qual = torrent.resolution || torrent.quality || ''
   const lang = torrent.language || ''
   const flag = { 'HUN': '🇭🇺', 'ENG': '🇬🇧', 'MULTi': '🌍', 'HUN+ENG': '🇭🇺+🇬🇧' }[lang] || ''
   const cacheIcon = cacheType === 'personal' ? '⚡' : cacheType === 'global' ? '🌐' : '⏳'
-  
-  // Felbontás: explicit resolution > quality→resolution tipp > maga a quality
-  const QUAL_TO_RES = {
-    'BDRip': '1080p',
-    'WEB-DL': '1080p',
-    'WebRip': '720p',
-    'BluRay': '1080p',
-    'HDTV': '720p',
-    'HDRip': '720p',
-    'DVDRip': '480p',
-    'DVD': '480p',
-    'Remux': '1080p'
-  }
-  const qual = torrent.resolution || QUAL_TO_RES[torrent.quality] || torrent.quality || ''
   
   const name = torrent.title
     .replace(/\./g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
   
-  // name mező: 1. sor nCore + ikon, 2. sor zászló + felbontás
-  const nameParts = [`nCore ${cacheIcon}`]
-  const badgeParts = []
-  if (flag) badgeParts.push(flag)
-  if (qual) badgeParts.push(qual)
-  if (badgeParts.length > 0) nameParts.push(badgeParts.join(' · '))
-  const streamName = nameParts.join('\n')
-  
-  // Title sorok
   const lines = []
   
-  // 1. sor: stream név
+  // 1. sor: név
   lines.push(name)
   
-  // 2. sor: S01E01 (sorozat) · 📦méret · év · ⭐ rating
+  // 2. sor: S01E01 (sorozat) · 🇭🇺 · 1080p · 📦méret
   const infoParts = []
   if (season && episode) {
     const s = String(season).padStart(2, '0')
     const e = String(episode).padStart(2, '0')
     infoParts.push(`S${s}E${e}`)
   }
+  if (flag) infoParts.push(flag)
+  if (qual) infoParts.push(qual)
   if (torrent.size && torrent.size !== '?') infoParts.push(`📦${torrent.size}`)
-  if (torrent.year) infoParts.push(torrent.year)
-  if (torrent.imdbRating && torrent.imdbRating !== '0') infoParts.push(`⭐ ${torrent.imdbRating}`)
   if (infoParts.length > 0) lines.push(infoParts.join(' · '))
   
-  // 3. sor: 🌱 seed · 🔄 leech
-  const seedParts = [`🌱 ${torrent.seeders}`]
-  if (torrent.leechers > 0) seedParts.push(`🔄 ${torrent.leechers}`)
-  lines.push(seedParts.join(' · '))
+  // 3. sor: 🌱 seed · ⚡/⏳
+  lines.push(`🌱 ${torrent.seeders} · ${cacheIcon}`)
   
-  return { name: streamName, title: lines.join('\n') }
+  return { title: lines.join('\n') }
 }
 
 // ─── Segéd: sorozat epizód szűrés ───────────────────────────────
 function filterByEpisode(torrents, season, episode) {
   if (!season) return torrents
-  
+
+  const s1 = String(season)
   const s2 = String(season).padStart(2, '0')
-  const e2 = episode ? String(episode).padStart(2, '0') : null
-  
-  // 1. fázis: pontos epizód keresés (S05E01, S05.E01, S05 E01, 5x01)
-  if (episode && e2) {
-    const exactPatterns = [
-      new RegExp(`[Ss]${s2}[Ee]${e2}(\\b|[^\\d])`),       // S05E01 (nem S05E019)
-      new RegExp(`[Ss]${s2}\\.[Ee]${e2}(\\b|[^\\d])`),     // S05.E01
-      new RegExp(`[Ss]${s2}[\\s._-][Ee]${e2}(\\b|[^\\d])`), // S05 E01, S05_E01
-      new RegExp(`${s2}x${e2}(\\b|[^\\d])`, 'i'),           // 5x01
-      new RegExp(`[Ee]p?${e2}(\\b|[^\\d])`, 'i')            // Episode 01, Ep01, E01
-    ]
-    const exact = torrents.filter(t => exactPatterns.some(p => p.test(t.title)))
-    if (exact.length > 0) {
-      console.log(`[STREAM] Epizód szűrés: ${torrents.length} → ${exact.length} (pontos: S${s2}E${e2})`)
-      return exact
+  const e1 = String(episode)
+  const e2 = String(episode).padStart(2, '0')
+
+  const patterns = []
+  if (episode) {
+    patterns.push(new RegExp(`[Ss]${s1}[Ee]${e1}`, 'i'))
+    patterns.push(new RegExp(`[Ss]${s2}[Ee]${e2}`, 'i'))
+    patterns.push(new RegExp(`[Ss]${s1}\\.?[Ee]${e1}`, 'i'))
+    patterns.push(new RegExp(`[Ss]${s2}\\.?[Ee]${e2}`, 'i'))
+  }
+  // S01 (nem S01E01, hanem csak évad)
+  patterns.push(new RegExp(`[Ss]${s2}(?:[^Ee\\d]|$)`, 'i'))
+  patterns.push(new RegExp(`[Ss]${s1}(?:[^Ee\\d]|$)`, 'i'))
+
+  const filtered = torrents.filter(t => {
+    if (patterns.some(p => p.test(t.title))) return true
+
+    // Range ellenőrzés: "S01-S10", "S01-10", "S01 - S10"
+    const rangeMatch = t.title.match(/[Ss](\d+)\s*[-–]\s*[Ss]?(\d+)/)
+    if (rangeMatch) {
+      const start = parseInt(rangeMatch[1], 10)
+      const end = parseInt(rangeMatch[2], 10)
+      if (season >= start && season <= end) return true
     }
-  }
-  
-  // 2. fázis: évad alapú keresés (S05, 5. évad, Season 5)
-  const seasonPatterns = [
-    new RegExp(`[Ss]${s2}\\b`, 'i'),          // S05 (szóhatárral)
-    new RegExp(`[Ss]eason\\s*${season}`, 'i'), // Season 5
-    new RegExp(`${season}\\.\\s*[Ee]vad`, 'i') // 5. évad
-  ]
-  const seasonMatch = torrents.filter(t => seasonPatterns.some(p => p.test(t.title)))
-  if (seasonMatch.length > 0) {
-    console.log(`[STREAM] Epizód szűrés: ${torrents.length} → ${seasonMatch.length} (évad: S${s2})`)
-    return seasonMatch
-  }
-  
-  // 3. fázis: nincs egyezés → teljes listát adjuk vissza
-  console.log(`[STREAM] Epizód szűrés: ${torrents.length} → ${torrents.length} (nincs egyezés)`)
+
+    // "1-10 évad", "1-10 season"
+    const rangeMatch2 = t.title.match(/(\d+)\s*[-–]\s*(\d+)\s*(évad|season)/i)
+    if (rangeMatch2) {
+      const start = parseInt(rangeMatch2[1], 10)
+      const end = parseInt(rangeMatch2[2], 10)
+      if (season >= start && season <= end) return true
+    }
+
+    return false
+  })
+
+  if (filtered.length > 0) return filtered
+  return torrents
 }
 
 // ─── Segéd: IMDB ID kinyerése (sorozatoknál :season:episode levágása)
@@ -410,37 +393,17 @@ function saveHashCache() {
 }
 
 async function checkAllTorrents(candidates, season, episode, imdbId) {
-  const baseUrl = PUBLIC_URL || `http://localhost:${PORT}`
-  const streams = []
-
-  // 0. Globális cache ellenőrzés (ha be van kapcsolva)
-  if (CHECK_GLOBAL_CACHE && candidates.length > 0) {
-    const top = candidates[0]
-    try {
-      const buf = await ncore.downloadTorrent(top.id, top.downloadUrl)
-      if (buf) {
-        const globalResult = await debrid.checkGlobalCache(buf, season, episode)
-        if (globalResult.cached && globalResult.streamUrl) {
-          console.log(`[STREAM] ✅ Globális cache-ben: ${top.title.substring(0, 40)}`)
-          const display = makeStreamDisplay(top, true, 'global', season, episode)
-          streams.push({
-            name: display.name,
-            title: display.title,
-            url: globalResult.streamUrl,
-            behaviorHints: { notWebReady: false, bingeGroup: 'ncore-debrid' }
-          })
-          // Folytatjuk a többi jelölttel, ne return-oljunk!
-        }
-      }
-    } catch (e) {
-      console.log(`[STREAM] Globális cache ellenőrzés hiba: ${e.message}`)
-    }
-  }
-
-  // 1. Info_hash beszerzése: cache-ből, vagy .torrent letöltéssel (top 5)
   const topCandidates = candidates.slice(0, 5)
-  const hashResults = await Promise.allSettled(topCandidates.map(async (t) => {
-    if (hashCache[t.id]) return { torrentId: t.id, infoHash: hashCache[t.id] }
+  const streams = []
+  const baseUrl = PUBLIC_URL || `http://localhost:${PORT}`
+
+  // 1. Info_hash beszerzése: cache-ből, vagy .torrent letöltéssel (top 3)
+  //    Ha CHECK_GLOBAL_CACHE be van kapcsolva, mindig letöltjük a .torrent fájlt
+  //    (mert kell a buffer a globális cache ellenőrzéshez)
+  const top3 = topCandidates.slice(0, 3)
+  const hashResults = await Promise.allSettled(top3.map(async (t) => {
+    const needBuffer = CHECK_GLOBAL_CACHE  // globális cache check-hez mindig kell buffer
+    if (!needBuffer && hashCache[t.id]) return { torrentId: t.id, infoHash: hashCache[t.id], buffer: null }
     try {
       const buf = await ncore.downloadTorrent(t.id, t.downloadUrl)
       const infoHash = debrid._parseInfoHash(buf)
@@ -448,14 +411,16 @@ async function checkAllTorrents(candidates, season, episode, imdbId) {
         hashCache[t.id] = infoHash
         saveHashCache()
       }
-      return { torrentId: t.id, infoHash, buffer: null }
-    } catch (_) { return { torrentId: t.id, infoHash: null } }
+      return { torrentId: t.id, infoHash, buffer: needBuffer ? buf : null }
+    } catch (_) { return { torrentId: t.id, infoHash: null, buffer: null } }
   }))
 
   const hashes = {}
+  const buffers = {}  // buffer-ek a globális cache ellenőrzéshez
   for (const r of hashResults) {
     if (r.status === 'fulfilled' && r.value.infoHash) {
       hashes[r.value.torrentId] = r.value.infoHash
+      if (r.value.buffer) buffers[r.value.torrentId] = r.value.buffer
     }
   }
 
@@ -475,35 +440,49 @@ async function checkAllTorrents(candidates, season, episode, imdbId) {
   } catch (_) {}
 
   // 3. Státusz ellenőrzés és stream generálás
+  let globalCacheChecked = false  // csak 1x próbálkozunk
   for (const torrent of topCandidates) {
     let isCached = false
-    let cacheType = null
+    let cacheType = null  // 'personal', 'global', vagy null
     let streamUrl = null
     const th = hashes[torrent.id]
     if (th) {
       isCached = seedboxHashes.has(th.toLowerCase())
+      // Ha cache-ben van, keressük ki a seedboxból a stream URL-t
       if (isCached) {
         cacheType = 'personal'
         const cachedTorrent = seedboxData.find(t => 
           t.hashString && t.hashString.toLowerCase() === th.toLowerCase() && t.downloadPercent === 100
         )
         if (cachedTorrent && cachedTorrent.files) {
-          streamUrl = await (season && episode
-            ? debrid._getDownloadLinkByEpisode(cachedTorrent.files, season, episode)
-            : debrid._getDownloadLink(cachedTorrent.files))
+          streamUrl = await debrid._getDownloadLink(cachedTorrent.files, season, episode)
         }
       }
+    }
+    
+    // Globális cache ellenőrzés (csak a legjobb ⏳ kandidátusra)
+    if (!isCached && CHECK_GLOBAL_CACHE && !globalCacheChecked && th && buffers[torrent.id]) {
+      console.log(`[STREAM] Globális cache ellenőrzés: ${torrent.title.substring(0, 40)}...`)
+      const globalResult = await debrid.checkGlobalCache(buffers[torrent.id])
+      if (globalResult && globalResult.cached && globalResult.streamUrl) {
+        isCached = true
+        cacheType = 'global'
+        streamUrl = globalResult.streamUrl
+        console.log(`[STREAM] ✅ Globális cache-ben: ${torrent.title.substring(0, 40)}`)
+      }
+      globalCacheChecked = true
+      delete buffers[torrent.id]  // takarítás
     }
     
     const display = makeStreamDisplay(torrent, isCached, cacheType, season, episode)
     const dlParam = encodeURIComponent(torrent.downloadUrl || '')
     const imdbParam = encodeURIComponent(imdbId || '')
     streams.push({
-      name: display.name,
+      name: 'nCore',
       title: display.title,
       url: isCached && streamUrl 
         ? streamUrl  // ⚡ közvetlen Debrid-Link URL
-        : `${baseUrl}/play/${torrent.id}?dl=${dlParam}&imdb=${imdbParam}${season && episode ? `&s=${season}&e=${episode}` : ''}`,  // ⏳ proxy
+        : `${baseUrl}/play/${torrent.id}?dl=${dlParam}&imdb=${imdbParam}`,  // ⏳ proxy
       behaviorHints: { notWebReady: !(isCached && streamUrl), bingeGroup: 'ncore-debrid' }
     })
   }
@@ -530,9 +509,7 @@ app.use(getRouter(stremioInterface))
 app.get('/play/:torrentId', async (req, res) => {
   const { torrentId } = req.params
   const downloadUrl = req.query.dl ? decodeURIComponent(req.query.dl) : null
-  const season = req.query.s ? parseInt(req.query.s) : null
-  const episode = req.query.e ? parseInt(req.query.e) : null
-  console.log(`[PLAY] Keres: torrentId=${torrentId}${downloadUrl ? ' (+dl)' : ''}${season ? ` S${season}E${episode}` : ''}`)
+  console.log(`[PLAY] Kérés: torrentId=${torrentId}${downloadUrl ? ' (+dl)' : ''}`)
 
   try {
     if (!ncore.isLoggedIn()) {
@@ -546,7 +523,7 @@ app.get('/play/:torrentId', async (req, res) => {
     console.log(`[PLAY] buffer: ${torrentBuffer.length} byte, info_hash: ${debrid._parseInfoHash(torrentBuffer)?.slice(0, 12) || 'NULL'}`)
 
     console.log(`[PLAY] Debrid-Link: ${torrentId}`)
-    const result = await debrid.addTorrentFile(torrentBuffer, season, episode)
+    const result = await debrid.addTorrentFile(torrentBuffer)
     if (!result) {
       return res.status(502).json({ error: 'Debrid-Link hiba (maxTorrent?)' })
     }
@@ -558,7 +535,7 @@ app.get('/play/:torrentId', async (req, res) => {
 
     if (result.torrentId) {
       console.log(`[PLAY] ⏳ Várakozás: ${result.torrentId}`)
-      const waitResult = await debrid.waitForTorrent(result.torrentId, season, episode)
+      const waitResult = await debrid.waitForTorrent(result.torrentId)
       if (waitResult && waitResult.streamUrl) {
         console.log(`[PLAY] ✅ Stream URL: ${waitResult.streamUrl.slice(0, 60)}...`)
         return res.redirect(302, waitResult.streamUrl)
@@ -576,7 +553,7 @@ app.get('/play/:torrentId', async (req, res) => {
 })
 
 app.listen(PORT, () => {
-  console.log(`\n🎬 nCore + Debrid-Link Stremio Addon v1.16.1`)
+  console.log(`\n🎬 nCore + Debrid-Link Stremio Addon v1.11.0`)
   console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
   console.log(`   Szerver: http://localhost:${PORT}`)
   console.log(`   Manifest: http://localhost:${PORT}/manifest.json`)

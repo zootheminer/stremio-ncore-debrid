@@ -29,11 +29,8 @@ class DebridClient {
   /**
    * Torrent fájl feltöltése (gyors verzió - poll nélkül)
    * Először info_hash alapján ellenőrzi a seedbox-ot, csak ha nincs meg, tölt fel újat.
-   * @param {Buffer} torrentBuffer - .torrent fájl
-   * @param {number} [season] - Évad (season pack esetén)
-   * @param {number} [episode] - Epizód (season pack esetén)
    */
-  async addTorrentFile(torrentBuffer, season, episode) {
+  async addTorrentFile(torrentBuffer) {
     // 1. Info_hash kinyerése a .torrent-ből
     const infoHash = this._parseInfoHash(torrentBuffer)
     if (infoHash) {
@@ -41,9 +38,7 @@ class DebridClient {
       const existing = await this._findByHash(infoHash)
       if (existing) {
         console.log('[DEBRID] ✅ Már a seedboxban van (hash alapján)!')
-        const streamUrl = await (season && episode
-          ? this._getDownloadLinkByEpisode(existing.files, season, episode)
-          : this._getDownloadLink(existing.files))
+        const streamUrl = await this._getDownloadLink(existing.files)
         if (streamUrl) {
           return { torrentId: existing.id, streamUrl, files: existing.files || [] }
         }
@@ -81,9 +76,7 @@ class DebridClient {
       // Ha cache-ben van, azonnal stream URL
       if (tv.downloaded || tv.downloadPercent === 100) {
         console.log('[DEBRID] ✅ Cache-ben van!')
-        const streamUrl = await (season && episode
-          ? this._getDownloadLinkByEpisode(tv.files, season, episode)
-          : this._getDownloadLink(tv.files))
+        const streamUrl = await this._getDownloadLink(tv.files)
         return { torrentId: tv.id, streamUrl, files: tv.files || [] }
       }
 
@@ -242,10 +235,10 @@ class DebridClient {
    */
   async deleteTorrent(torrentId) {
     try {
-      const res = await this.client.delete(`/seedbox/${torrentId}/remove`)
+      const res = await this.client.delete(`/seedbox/${torrentId}/delete`)
       return res.data?.success === true
     } catch (err) {
-      console.warn('[DEBRID] Törlési hiba:', torrentId, err.message, '- status:', err.response?.status)
+      console.warn('[DEBRID] Törlési hiba:', torrentId, err.message)
       return false
     }
   }
@@ -257,20 +250,16 @@ class DebridClient {
    * (nem foglal slot-ot feleslegesen).
    * 
    * @param {Buffer} torrentBuffer - .torrent fájl tartalma
-   * @param {number} [season] - Évad (season pack esetén)
-   * @param {number} [episode] - Epizód (season pack esetén)
    * @returns {object|null} - { cached: true, streamUrl } vagy { cached: false }
    */
-  async checkGlobalCache(torrentBuffer, season, episode) {
+  async checkGlobalCache(torrentBuffer) {
     // 1. Először nézzük a saját seedbox-ot (gyors, nincs feltöltés)
     const infoHash = this._parseInfoHash(torrentBuffer)
     if (infoHash) {
       const existing = await this._findByHash(infoHash)
       if (existing && existing.downloadPercent === 100) {
         console.log('[DEBRID] ✅ Már a saját seedbox-ban van!')
-        const streamUrl = await (season && episode
-          ? this._getDownloadLinkByEpisode(existing.files, season, episode)
-          : this._getDownloadLink(existing.files))
+        const streamUrl = await this._getDownloadLink(existing.files)
         if (streamUrl) return { cached: true, streamUrl }
       }
     }
@@ -306,18 +295,17 @@ class DebridClient {
 
       if (tv.downloadPercent === 100) {
         console.log('[DEBRID] ✅ Globális cache-ben van!')
-        const streamUrl = await (season && episode
-          ? this._getDownloadLinkByEpisode(tv.files, season, episode)
-          : this._getDownloadLink(tv.files))
+        const streamUrl = await this._getDownloadLink(tv.files)
         if (streamUrl) {
-          // Megvan → töröljük (csak ellenőrzés volt, stream URL megvan)
+          // Megvan → töröljük a seedbox-ból (nem kell, stream URL van)
           await this.deleteTorrent(torrentId)
           return { cached: true, streamUrl }
         }
       }
 
-      // Nincs cache-ben → megtartjuk (elkezdődhet a letöltés)
-      console.log('[DEBRID] ⏳ Nincs globális cache-ben, megtartva')
+      // Nincs cache-ben → töröljük (nem foglal slot-ot)
+      console.log('[DEBRID] ⏳ Nincs globális cache-ben, törlés...')
+      await this.deleteTorrent(torrentId)
       return { cached: false }
 
     } catch (err) {
@@ -418,7 +406,7 @@ class DebridClient {
    * @param {string} torrentId - Debrid-Link torrent ID
    * @returns {object|null} - { torrentId, streamUrl } vagy null
    */
-  async waitForTorrent(torrentId, season, episode) {
+  async waitForTorrent(torrentId) {
     console.log(`[DEBRID] Várakozás torrentre: ${torrentId}`)
     try {
       const finalInfo = await this._waitForSeed(torrentId)
@@ -427,9 +415,7 @@ class DebridClient {
         return null
       }
 
-      const streamUrl = await (season && episode
-          ? this._getDownloadLinkByEpisode(finalInfo.files, season, episode)
-          : this._getDownloadLink(finalInfo.files))
+      const streamUrl = await this._getDownloadLink(finalInfo.files)
       if (!streamUrl) {
         console.error('[DEBRID] ❌ Nincs stream URL')
         return null
@@ -502,29 +488,37 @@ class DebridClient {
     return null
   }
 
-  // ─── Privát metódusok ────────────────────────────────────────
-
-  /**
-   * Stream URL keresése fájl listából, a legnagyobb videó fájl alapján.
-   * (Alapértelmezett viselkedés)
-   */
-  async _getDownloadLink(files) {
+  async _getDownloadLink(files, season, episode) {
     if (!files || files.length === 0) return null
 
-    // Videó kiterjesztések (csak ezeket választjuk)
     const videoExt = /\.(mkv|mp4|avi|ts|m2ts|mov|wmv|flv|webm)$/i
 
-    // Szűrés: csak videó fájlok, NEM sample, NEM nfo/txt/etc
-    const videos = files.filter(f => {
+    let videos = files.filter(f => {
       if (!f.name) return false
-      if (/sample/i.test(f.name)) return false   // sample fájlok kizárása
-      return videoExt.test(f.name)                // csak videó kiterjesztés
+      if (/sample/i.test(f.name)) return false
+      return videoExt.test(f.name)
     })
 
-    // Ha nincs videó fájl, próbáljuk az összeset (fallback)
-    const candidates = videos.length > 0 ? videos : files
+    if (season && videos.length > 0) {
+      const s2 = String(season).padStart(2, '0')
+      const s1 = String(season)
+      const seasonRegex = new RegExp(`(?:S|Season|Évad|évad)\\s*0*${s1}(?:[^\\d]|$)`, 'i')
+      const seasonRegex2 = new RegExp(`[Ss]${s2}(?:[^Ee\\d]|$)`, 'i')
 
-    // Legnagyobb fájl kiválasztása
+      let matching = videos.filter(f => seasonRegex.test(f.name) || seasonRegex2.test(f.name))
+
+      if (episode && matching.length > 0) {
+        const e2 = String(episode).padStart(2, '0')
+        const e1 = String(episode)
+        const epRegex = new RegExp(`[Ss]${s2}[Ee]${e2}`, 'i')
+        const epRegex2 = new RegExp(`[Ss]${s1}[Ee]${e1}`, 'i')
+        matching = matching.filter(f => epRegex.test(f.name) || epRegex2.test(f.name))
+      }
+
+      if (matching.length > 0) videos = matching
+    }
+
+    const candidates = videos.length > 0 ? videos : files
     const sorted = [...candidates].sort((a, b) => (b.length || 0) - (a.length || 0))
     const biggest = sorted[0]
 
@@ -539,82 +533,6 @@ class DebridClient {
       } catch (_) {}
     }
 
-    return null
-  }
-
-  /**
-   * Stream URL keresése epizód alapján — season pack-ekhez.
-   * Először próbál epizód-specifikus fájlt találni (S01E14, 1x14, stb.),
-   * ha nincs, visszaesik a legnagyobb fájlra.
-   * 
-   * @param {Array} files - Debrid-Link fájl lista
-   * @param {number} season - Évad száma
-   * @param {number} episode - Epizód száma
-   * @returns {string|null} - Stream URL
-   */
-  async _getDownloadLinkByEpisode(files, season, episode) {
-    if (!files || files.length === 0) return null
-
-    const videoExt = /\.(mkv|mp4|avi|ts|m2ts|mov|wmv|flv|webm)$/i
-
-    // Videó fájlok szűrése
-    const videos = files.filter(f => {
-      if (!f.name) return false
-      if (/sample/i.test(f.name)) return false
-      return videoExt.test(f.name)
-    })
-
-    if (videos.length === 0) return null
-
-    // Ha van season/episode, próbáljunk epizód-specifikus fájlt találni
-    if (season && episode) {
-      const s2 = String(season).padStart(2, '0')
-      const e2 = String(episode).padStart(2, '0')
-
-      const episodePatterns = [
-        new RegExp(`[Ss]${s2}[Ee]${e2}(\\b|[^\\d])`),         // S01E14
-        new RegExp(`[Ss]${s2}\\.[Ee]${e2}(\\b|[^\\d])`),       // S01.E14
-        new RegExp(`[Ss]${s2}[\\s._-][Ee]${e2}(\\b|[^\\d])`),   // S01 E14, S01_E14
-        new RegExp(`${s2}x${e2}(\\b|[^\\d])`, 'i'),             // 1x14
-        new RegExp(`[Ee]p?${e2}(\\b|[^\\d])`, 'i'),             // Episode 14, Ep14, E14
-        new RegExp(`[Ss]${s2}[Ee]${e2}`, 'i'),                  // S01E14 (szóhatár nélkül, fallback)
-      ]
-
-      // Rendezés: aki epizód mintára illeszkedik, az legyen elől
-      const scored = videos.map(f => {
-        const score = episodePatterns.findIndex(p => p.test(f.name))
-        return { file: f, score: score >= 0 ? score : 999 }
-      })
-      scored.sort((a, b) => a.score - b.score)
-
-      // Ha van epizód-egyezéses fájl, használjuk azt
-      if (scored[0].score < 999) {
-        const best = scored[0].file
-        if (best.downloadUrl) return best.downloadUrl
-        if (best.id) {
-          try {
-            const res = await this.client.get('/download/add', {
-              params: { id: best.id }
-            })
-            return res.data?.value?.downloadUrl || res.data?.value?.url
-          } catch (_) {}
-        }
-      }
-    }
-
-    // Fallback: legnagyobb fájl
-    const sorted = [...videos].sort((a, b) => (b.length || 0) - (a.length || 0))
-    const biggest = sorted[0]
-
-    if (biggest.downloadUrl) return biggest.downloadUrl
-    if (biggest.id) {
-      try {
-        const res = await this.client.get('/download/add', {
-          params: { id: biggest.id }
-        })
-        return res.data?.value?.downloadUrl || res.data?.value?.url
-      } catch (_) {}
-    }
     return null
   }
 }

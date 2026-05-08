@@ -12,7 +12,7 @@
     "series": 4
   },
   "stream": {
-    "checkGlobalCache": true,
+    "checkGlobalCache": false,
     "maxCandidates": 10,
     "maxUncachedToWait": 2
   }
