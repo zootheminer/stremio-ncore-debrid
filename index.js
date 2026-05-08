@@ -319,10 +319,10 @@ function makeStreamDisplay(torrent, isCached, cacheType, season, episode) {
   if (torrent.size && torrent.size !== '?') infoParts.push(`📦${torrent.size}`)
   if (infoParts.length > 0) lines.push(infoParts.join(' · '))
   
-  // 3. sor: 🌱 seed · ⚡/⏳
-  lines.push(`🌱 ${torrent.seeders} · ${cacheIcon}`)
+  // 3. sor: 🌱 seed
+  lines.push(`🌱 ${torrent.seeders}`)
   
-  return { title: lines.join('\n') }
+  return { title: lines.join('\n'), cacheIcon }
 }
 
 // ─── Segéd: sorozat epizód szűrés ───────────────────────────────
@@ -484,7 +484,7 @@ async function checkAllTorrents(candidates, season, episode, imdbId) {
     const dlParam = encodeURIComponent(torrent.downloadUrl || '')
     const imdbParam = encodeURIComponent(imdbId || '')
     streams.push({
-      name: 'nCore',
+      name: `nCore ${display.cacheIcon}`,
       title: display.title,
       url: isCached && streamUrl 
         ? streamUrl  // ⚡ közvetlen Debrid-Link URL
