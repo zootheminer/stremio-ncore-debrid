@@ -40,7 +40,7 @@ class NcoreClient {
     this.password = password
     this.session = null
     this.baseUrl = 'https://ncore.pro'
-    this.cookieFile = path.join(os.tmpdir(), `ncore_cookies_${Date.now()}.txt`)
+    this.cookieFile = path.join(os.tmpdir(), 'ncore_cookies.txt')
     this._ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
   }
 
@@ -151,8 +151,7 @@ class NcoreClient {
   _jsonApi(params) {
     const queryStr = new URLSearchParams(params).toString()
     const result = this._curl(`/torrents.php?${queryStr}`, {
-      referer: `${this.baseUrl}/`,
-      headers: { 'Accept': 'application/json,text/html,*/*' }
+      referer: `${this.baseUrl}/`
     })
 
     const text = result.data.trim()
@@ -259,7 +258,7 @@ class NcoreClient {
     const url = downloadUrl.startsWith('http') ? downloadUrl : `${this.baseUrl}${downloadUrl}`
     console.log(`[NCORE] Torrent letöltés: ${torrentId}`)
 
-    const outputFile = `/tmp/ncore_torrent_${torrentId}_${Date.now()}.torrent`
+    const outputFile = `/tmp/ncore_torrent_${torrentId}.torrent`
     try {
       require('child_process').execFileSync('curl', ['-s', '-L', '-b', this.cookieFile, '-o', outputFile, url], {
         timeout: 30000

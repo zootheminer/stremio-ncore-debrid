@@ -1,0 +1,34 @@
+◇ injected env (5) from .env // tip: ⌘ enable debugging { debug: true }
+[CONFIG] Betöltve: {
+  "seedLimits": {
+    "movie": 300,
+    "series": 200
+  },
+  "catalogLimits": {
+    "movie": 100,
+    "series": 100
+  },
+  "catalogPages": {
+    "movie": 6,
+    "series": 6
+  },
+  "stream": {
+    "checkGlobalCache": false,
+    "maxCandidates": 10,
+    "maxUncachedToWait": 2
+  }
+}
+
+🎬 nCore + Debrid-Link Stremio Addon v1.11.0
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   Szerver: http://localhost:7000
+   Manifest: http://localhost:7000/manifest.json
+   Telepítés: https://ncore-stremio.duckdns.org/BarackFa789
+   Filmek: 300+ seed  |  Sorozatok: 200+ seed
+   Oldalak: 6 film / 6 sorozat  |  Max: 100/100
+   Config: /home/zoltan/.hermes/projects/stremio-ncore-debrid/config.json
+
+   ⏳ nCore bejelentkezés folyamatban...
+
+[NCORE] Bejelentkezés...
+[NCORE] ✅ Sikeres bejelentkezés! (JSON API)

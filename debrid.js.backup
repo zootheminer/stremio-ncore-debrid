@@ -277,6 +277,7 @@ class DebridClient {
 
     // 2. Feltöltés → megnézzük, hogy globális cache-ben van-e
     console.log('[DEBRID] Globális cache ellenőrzés...')
+    let uploadedTorrentId = null
     try {
       const FormData = require('form-data')
       const form = new FormData()
@@ -296,6 +297,11 @@ class DebridClient {
       })
 
       const data = addRes.data
+      // Extract torrentId if available, regardless of success flag
+      if (data.value && data.value.id) {
+        uploadedTorrentId = data.value.id
+      }
+
       if (!data.success || !data.value) {
         console.log('[DEBRID] ⚠️ Globális cache ellenőrzés: API hiba')
         return { cached: false }
@@ -312,14 +318,16 @@ class DebridClient {
         if (streamUrl) {
           // Megvan → töröljük (csak ellenőrzés volt, stream URL megvan)
           await this.deleteTorrent(torrentId)
+          uploadedTorrentId = null // prevent double delete
           return { cached: true, streamUrl }
         }
       }
 
-      // Nincs cache-ben → megtartjuk (elkezdődhet a letöltés)
-      console.log('[DEBRID] ⏳ Nincs globális cache-ben, megtartva')
-      return { cached: false }
-
+       // Nincs cache-ben → töröljük a seedbox-ból (nem foglal slot-ot feleslegesen)
+       await this.deleteTorrent(torrentId);
+       uploadedTorrentId = null // prevent double delete
+       console.log('[DEBRID] ⏳ Nincs globális cache-ben, törölve');
+       return { cached: false };
     } catch (err) {
       console.error('[DEBRID] Globális cache hiba:', err.message)
       if (err.response) {
@@ -331,17 +339,18 @@ class DebridClient {
         }
       }
       return { cached: false }
+    } finally {
+      // If we uploaded a torrent and haven't deleted it yet, clean up.
+      if (uploadedTorrentId) {
+        try {
+          await this.deleteTorrent(uploadedTorrentId)
+          console.log('[DEBRID] ⏳ Nincs globális cache-ben, törölve (finally)')
+        } catch (finalErr) {
+          console.warn('[DEBRID] Finally blokkban törlési hiba:', finalErr.message)
+        }
+      }
     }
-  }
-
-  /**
-   * Info_hash kinyerése .torrent fájlból
-   * 
-   * Megbízható bencoding parser: byte-szinten dolgozik, és helyesen kezeli
-   * a sztring hosszakat (nem téveszti meg, ha a sztring tartalom 'd' vagy 'e'
-   * karaktereket tartalmaz).
-   */
-  _parseInfoHash(torrentBuffer) {
+  }\n\n  /**\n   * Info_hash kinyerése .torrent fájlból\n   * \n   * Megbízható bencoding parser: byte-szinten dolgozik, és helyesen kezeli\n   * a sztring hosszakat (nem téveszti meg, ha a sztring tartalom 'd' vagy 'e'\n   * karaktereket tartalmaz).\n   */\n  _parseInfoHash(torrentBuffer) {
     try {
       const buf = torrentBuffer
       
@@ -523,6 +532,8 @@ class DebridClient {
 
     // Ha nincs videó fájl, próbáljuk az összeset (fallback)
     const candidates = videos.length > 0 ? videos : files
+
+    // Legnagyobb fájl kiválasztása
     const sorted = [...candidates].sort((a, b) => (b.length || 0) - (a.length || 0))
     const biggest = sorted[0]
 
