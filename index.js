@@ -610,6 +610,17 @@ app.get('/play/:torrentId', async (req, res) => {
   }
 })
 
+// ─── Health check ───────────────────────────────────────────────
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    version: '1.16.1',
+    uptime: Math.floor(process.uptime()),
+    ncore: ncore.isLoggedIn(),
+    timestamp: new Date().toISOString()
+  })
+})
+
 app.listen(PORT, () => {
   console.log(`\n🎬 nCore + Debrid-Link Stremio Addon v1.16.1`)
   console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
