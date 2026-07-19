@@ -318,15 +318,15 @@ function makeStreamDisplay(torrent, isCached, cacheType, season, episode) {
   
   // name mező: cache ikon + felbontás
   const badgeParts = []
-  if (cacheIcon) badgeParts.push(cacheIcon)
+  if (cacheIcon) badgeParts.push(`nCore ${cacheIcon}`)
   if (qual) badgeParts.push(qual)
   const streamName = badgeParts.length > 0 ? badgeParts.join(' · ') : name.substring(0, 40)
 
   // Title sorok
   const lines = []
 
-  // 1. sor: nCore + zászló · stream név
-  lines.push(`nCore ${flag || ''} · ${name}`)
+  // 1. sor: zászló · stream név
+  lines.push(`${flag || ''} · ${name}`)
   
   // 2. sor: S01E01 (sorozat) · 📦méret · év · ⭐ rating
   const infoParts = []
