@@ -310,8 +310,8 @@ class NcoreClient {
     const upper = title.toUpperCase()
     const result = { quality: null, resolution: null, language: null, hasHungarian: false, hasEnglish: false }
 
-    // Felbontás
-    const resMatch = title.match(/[.\s(](\d{3,4}[pi])[.\s)]/)
+    // Felbontás — bármilyen nem alfanumerikus karakter határolja
+    const resMatch = title.match(/(?:^|[^a-zA-Z0-9])(\d{3,4}[pi])(?:$|[^a-zA-Z0-9])/)
     if (resMatch) result.resolution = resMatch[1]
 
     // Minőség típus (csak ha nem egyezik a felbontással)
@@ -319,13 +319,13 @@ class NcoreClient {
       result.quality = '4K'
       result.resolution = '2160p'
     } else if (/\bBDRIP\b/.test(upper)) result.quality = 'BDRip'
-    else if (/\bWEB-DL\b/.test(upper)) result.quality = 'WEB-DL'
-    else if (/\bWEBRIP\b/.test(upper)) result.quality = 'WebRip'
-    else if (/\bBLURAY\b/.test(upper)) result.quality = 'BluRay'
-    else if (/\bDVDRIP\b/.test(upper)) result.quality = 'DVDRip'
+    else if (/\bWEB[-.]?DL\b/.test(upper)) result.quality = 'WEB-DL'
+    else if (/\bWEB[-.]?RIP\b/.test(upper)) result.quality = 'WebRip'
+    else if (/\bBLU[-.]?RAY\b/.test(upper)) result.quality = 'BluRay'
+    else if (/\bDVD[-.]?RIP\b/.test(upper)) result.quality = 'DVDRip'
     else if (/\bDVD(R)?\b/.test(upper)) result.quality = 'DVD'
     else if (/\bHDTV\b/.test(upper)) result.quality = 'HDTV'
-    else if (/\bHDRIP\b/.test(upper)) result.quality = 'HDRip'
+    else if (/\bHD[-.]?RIP\b/.test(upper)) result.quality = 'HDRip'
     else if (/\bCAM(RIP)?\b/.test(upper)) result.quality = 'CAM'
     else if (/\bTS\b/.test(upper) && !result.quality) result.quality = 'TS'
     else if (/\bREMUX\b/.test(upper)) result.quality = 'Remux'
