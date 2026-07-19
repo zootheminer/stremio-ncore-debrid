@@ -1,0 +1,27 @@
+[Unit]
+Description=Stremio nCore + Debrid-Link Addon
+After=network.target
+
+[Service]
+Type=simple
+User=zoltan
+WorkingDirectory=/home/zoltan/.hermes/projects/stremio-ncore-debrid
+ExecStart=/usr/local/bin/node index.js
+Restart=on-failure
+RestartSec=5
+Environment=NODE_ENV=production
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=stremio-ncore
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/zoltan/.hermes/projects/stremio-ncore-debrid
+ReadWritePaths=/tmp
+
+[Install]
+WantedBy=multi-user.target

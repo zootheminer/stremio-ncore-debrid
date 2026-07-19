@@ -237,6 +237,26 @@ These defaults are deliberately **conservative** (high seed limits, many pages) 
 npm start
 ```
 
+### Run as Systemd Service
+
+For production use, run the addon as a systemd service (auto-start on boot, auto-restart on crash):
+
+```bash
+# Copy service file
+sudo cp stremio-ncore.service /etc/systemd/system/
+
+# Enable and start
+sudo systemctl daemon-reload
+sudo systemctl enable stremio-ncore
+sudo systemctl start stremio-ncore
+
+# Check status
+sudo systemctl status stremio-ncore
+
+# View logs
+journalctl -u stremio-ncore -f
+```
+
 ### Install in Stremio
 
 Open Stremio → Addons → "Add addon" → paste your addon's manifest URL:
