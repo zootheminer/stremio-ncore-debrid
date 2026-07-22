@@ -383,19 +383,9 @@ function filterByEpisode(torrents, season, episode) {
     }
   }
 
-  // 2. fázis: évad alapú keresés (S05, 5. évad, Season 5)
-  const seasonPatterns = [
-    new RegExp(`[Ss]${s2}\\b`, 'i'),          // S05 (szóhatárral)
-    new RegExp(`[Ss]eason\\s*${season}`, 'i'), // Season 5
-    new RegExp(`${season}\\.\\s*[Ee]vad`, 'i') // 5. évad
-  ]
-  const seasonMatch = torrents.filter(t => seasonPatterns.some(p => p.test(t.title)))
-  if (seasonMatch.length > 0) {
-    console.log(`[STREAM] Epizód szűrés: ${torrents.length} → ${seasonMatch.length} (évad: S${s2})`)
-    return seasonMatch
-  }
-
-  // 2a. fázis: range alapú keresés (S01-S10, 1-10 évad/season)
+  // 2. fázis: range alapú keresés (S01-S10, S01-S06, Complete Series)
+  //    Előbb keressük a season pack-eket, mint az egyéni S06 torrenteket,
+  //    mert a range pack tartalmazhatja a keresett részt.
   const rangeResults = torrents.filter(t => {
     const rangeMatch = t.title.match(/[Ss](\d+)\s*[-–]\s*[Ss]?(\d+)/)
     if (rangeMatch) {
@@ -411,21 +401,29 @@ function filterByEpisode(torrents, season, episode) {
     }
     return false
   })
-  if (rangeResults.length > 0) {
-    console.log(`[STREAM] Epizód szűrés: ${torrents.length} → ${rangeResults.length} (range: ${season})`)
-    return rangeResults
+
+  // 3. fázis: egyéni évad alapú keresés (S06, 6. évad, Season 6)
+  const seasonPatterns = [
+    new RegExp(`[Ss]${s2}\\b`, 'i'),          // S06 (szóhatárral)
+    new RegExp(`[Ss]eason\\s*${season}`, 'i'), // Season 6
+    new RegExp(`${season}\\.\\s*[Ee]vad`, 'i') // 6. évad
+  ]
+  const seasonMatch = torrents.filter(t => seasonPatterns.some(p => p.test(t.title)))
+
+  // Összegyűjtjük mindkettőt (deduplikálás ID alapján)
+  const all = [...rangeResults]
+  for (const t of seasonMatch) {
+    if (!all.find(x => x.id === t.id)) all.push(t)
   }
 
-  // 2b. Fallback: bármilyen "évad-csomag" amiben szerepel a keresett évad
-  //     Pl. "Stargate.SG-1.Complete.Series.1-10" vagy "Stargate.S01-S10"
-  //     Itt NEM követeljük meg a pontos "S06" mintát, mert a season pack
-  //     neve tartalmazhatja az évadot más formában is.
-  if (episode) {
-    console.log(`[STREAM] Epizód szűrés: ${torrents.length} → ${torrents.length} (nincs egyezés, season pack fallback)`)
-    return torrents
+  if (all.length > 0) {
+    const rangeCount = rangeResults.length
+    const seasonCount = all.length - rangeCount
+    console.log(`[STREAM] Epizód szűrés: ${torrents.length} → ${all.length} (range: ${rangeCount}, évad: ${seasonCount})`)
+    return all
   }
 
-  // 3. fázis: nincs egyezés → teljes listát adjuk vissza
+  // 4. fázis: nincs egyezés → teljes listát adjuk vissza
   console.log(`[STREAM] Epizód szűrés: ${torrents.length} → ${torrents.length} (nincs egyezés)`)
   return torrents
 }
