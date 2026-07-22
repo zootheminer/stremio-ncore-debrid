@@ -384,8 +384,18 @@ function filterByEpisode(torrents, season, episode) {
   }
 
   // 2. fázis: range alapú keresés (S01-S10, S01-S06, Complete Series)
-  //    Előbb keressük a season pack-eket, mint az egyéni S06 torrenteket,
-  //    mert a range pack tartalmazhatja a keresett részt.
+  //
+  // ⚠️ KRITIKUS SORREND: range ELŐBB, egyéni évad (S06) UTÁNA!
+  //
+  // Miért? Amikor egy konkrét epizódra keresünk (pl. S06E21), a "Csillagkapu S01-S10"
+  // season pack-ban NEM szerepel az "S06E21" minta — csak "S01-S10" van a névben.
+  // Ha az egyéni "S06" mintát keresnénk előbb, az megtalálná a 4-5 egyéni S06
+  // lemezt (D1-D4) és AZONNAL return-ölne — a range fázis soha nem futna le,
+  // és a season pack (ami ~300 seed, a legjobb minőségű) elveszne.
+  //
+  // A range és egyéni évad eredményeit ÖSSZEGYŰJTJÜK (deduplikálva), hogy mindkét
+  // csoport szerepeljen a jelöltek között. A seeders szerinti rendezés később
+  // rangsorolja őket.
   const rangeResults = torrents.filter(t => {
     const rangeMatch = t.title.match(/[Ss](\d+)\s*[-–]\s*[Ss]?(\d+)/)
     if (rangeMatch) {
