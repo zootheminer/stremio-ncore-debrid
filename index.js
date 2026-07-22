@@ -416,6 +416,15 @@ function filterByEpisode(torrents, season, episode) {
     return rangeResults
   }
 
+  // 2b. Fallback: bármilyen "évad-csomag" amiben szerepel a keresett évad
+  //     Pl. "Stargate.SG-1.Complete.Series.1-10" vagy "Stargate.S01-S10"
+  //     Itt NEM követeljük meg a pontos "S06" mintát, mert a season pack
+  //     neve tartalmazhatja az évadot más formában is.
+  if (episode) {
+    console.log(`[STREAM] Epizód szűrés: ${torrents.length} → ${torrents.length} (nincs egyezés, season pack fallback)`)
+    return torrents
+  }
+
   // 3. fázis: nincs egyezés → teljes listát adjuk vissza
   console.log(`[STREAM] Epizód szűrés: ${torrents.length} → ${torrents.length} (nincs egyezés)`)
   return torrents
