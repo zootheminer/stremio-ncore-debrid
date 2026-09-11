@@ -542,9 +542,15 @@ class DebridClient {
 
   /**
    * Stream URL keresése epizód alapján — season pack-ekhez.
-   * Először próbál epizód-specifikus fájlt találni (S01E14, 1x14, stb.),
-   * ha nincs, visszaesik a legnagyobb fájlra.
-   * 
+   * Először próbál epizód-specifikus fájlt találni (S01E14, 1x14, stb.).
+   *
+   * BIZTONSÁG (Dark Matter S01E01 → S02E01 hiba tanulsága):
+   * A csupasz `[Ee]p?NN` minta egy "S02E01" nevű fájlban is megtalálja az
+   * "E01"-et. Ezért a találatot az episodeFilter őrével validáljuk:
+   * idegen évados fájl SOHA nem nyerhet a kért epizódra (findBestEpisodeFile).
+   * Ha nincs magabiztos találat: jelöletlen pack-nél marad a "legnagyobb fájl",
+   * de JELÖLT idegen fájlok esetén inkább null (nem szolgálunk ki rossz részt).
+   *
    * @param {Array} files - Debrid-Link fájl lista
    * @param {number} season - Évad száma
    * @param {number} episode - Epizód száma
@@ -566,28 +572,10 @@ class DebridClient {
 
     // Ha van season/episode, próbáljunk epizód-specifikus fájlt találni
     if (season && episode) {
-      const s2 = String(season).padStart(2, '0')
-      const e2 = String(episode).padStart(2, '0')
+      const { findBestEpisodeFile, hasAnyEpisodeMarker } = require('./episodeFilter')
+      const best = findBestEpisodeFile(videos, season, episode)
 
-      const episodePatterns = [
-        new RegExp(`[Ss]${s2}[Ee]${e2}(\\b|[^\\d])`),         // S01E14
-        new RegExp(`[Ss]${s2}\\.[Ee]${e2}(\\b|[^\\d])`),       // S01.E14
-        new RegExp(`[Ss]${s2}[\\s._-][Ee]${e2}(\\b|[^\\d])`),   // S01 E14, S01_E14
-        new RegExp(`${s2}x${e2}(\\b|[^\\d])`, 'i'),             // 1x14
-        new RegExp(`[Ee]p?${e2}(\\b|[^\\d])`, 'i'),             // Episode 14, Ep14, E14
-        new RegExp(`[Ss]${s2}[Ee]${e2}`, 'i'),                  // S01E14 (szóhatár nélkül, fallback)
-      ]
-
-      // Rendezés: aki epizód mintára illeszkedik, az legyen elől
-      const scored = videos.map(f => {
-        const score = episodePatterns.findIndex(p => p.test(f.name))
-        return { file: f, score: score >= 0 ? score : 999 }
-      })
-      scored.sort((a, b) => a.score - b.score)
-
-      // Ha van epizód-egyezéses fájl, használjuk azt
-      if (scored[0].score < 999) {
-        const best = scored[0].file
+      if (best) {
         if (best.downloadUrl) return best.downloadUrl
         if (best.id) {
           try {
@@ -597,6 +585,16 @@ class DebridClient {
             return res.data?.value?.downloadUrl || res.data?.value?.url
           } catch (_) {}
         }
+        return null
+      }
+
+      // Nincs magabiztos epizód-találat.
+      // Ha a fájlok epizód-jelöltek, de mind idegen — NE adjuk a legnagyobbat
+      // (az lenne a rossz rész). Csak jelöletlen pack-nél fallback-elünk.
+      const anyMarked = videos.some(f => hasAnyEpisodeMarker(f.name))
+      if (anyMarked) {
+        console.log(`[DEBRID] ⚠️ Nincs S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')} fájl a pack-ben — rossz rész helyett nincs stream`)
+        return null
       }
     }
 

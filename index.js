@@ -6,6 +6,7 @@ const cors = require('cors')
 const { addonBuilder, getRouter } = require('stremio-addon-sdk')
 const { NcoreClient } = require('./ncore')
 const { DebridClient } = require('./debrid')
+const { filterByEpisode } = require('./episodeFilter')
 const path = require('path')
 const os = require('os')
 
@@ -265,7 +266,7 @@ builder.defineStreamHandler(async ({ type, id }) => {
     // Sorozatoknál: CSAK a keresett évad/rész torrenteket tartsuk meg
     if (type === 'series' && season) {
       const before = torrents.length
-      torrents = filterByEpisode(torrents, season, episode)
+      torrents = filterByEpisode(torrents, season, episode, console.log)
       console.log(`[STREAM] Epizód szűrés: ${before} → ${torrents.length} (S${season}E${episode || '?'})`)
       if (torrents.length === 0) {
         console.log(`[STREAM] Nincs S${season}E${episode || '?'} torrent`)
@@ -348,95 +349,9 @@ function makeStreamDisplay(torrent, isCached, cacheType, season, episode) {
   return { name: streamName, title: lines.join('\n') }
 }
 
-// ─── Segéd: sorozat epizód szűrés ───────────────────────────────
-function filterByEpisode(torrents, season, episode) {
-  if (!season) return torrents
-  const s2 = String(season).padStart(2, '0')
-  const e2 = episode ? String(episode).padStart(2, '0') : null
-
-  // 1. fázis: pontos epizód keresés — S01E05, S01.E05, S01 E05, 1x05
-  if (episode && e2) {
-    const seasonEpisodePatterns = [
-      new RegExp(`[Ss]${s2}[Ee]${e2}(\\b|[^\\d])`),       // S05E01 (nem S05E019)
-      new RegExp(`[Ss]${s2}\\.[Ee]${e2}(\\b|[^\\d])`),     // S05.E01
-      new RegExp(`[Ss]${s2}[\\s._-][Ee]${e2}(\\b|[^\\d])`), // S05 E01, S05_E01
-      new RegExp(`${s2}x${e2}(\\b|[^\\d])`, 'i'),           // 5x01
-    ]
-    const exact = torrents.filter(t => seasonEpisodePatterns.some(p => p.test(t.title)))
-    if (exact.length > 0) {
-      console.log(`[STREAM] Epizód szűrés: ${torrents.length} → ${exact.length} (pontos: S${s2}E${e2})`)
-      return exact
-    }
-
-    // 1b. Fallback: Ep01/E01 keresés (évad jel nélkül) — kizárjuk a másévados találatokat
-    const epOnlyPattern = new RegExp(`[Ee]p?${e2}(\\b|[^\\d])`, 'i')
-    const seasonIndicator = new RegExp(`[Ss](\\d{1,2})\\b`, 'i')
-    const epOnly = torrents.filter(t => {
-      if (!epOnlyPattern.test(t.title)) return false
-      const sm = t.title.match(seasonIndicator)
-      if (sm && parseInt(sm[1]) !== season) return false
-      return true
-    })
-    if (epOnly.length > 0) {
-      console.log(`[STREAM] Epizód szűrés: ${torrents.length} → ${epOnly.length} (E${e2} fallback)`)
-      return epOnly
-    }
-  }
-
-  // 2. fázis: range alapú keresés (S01-S10, S01-S06, Complete Series)
-  //
-  // ⚠️ KRITIKUS SORREND: range ELŐBB, egyéni évad (S06) UTÁNA!
-  //
-  // Miért? Amikor egy konkrét epizódra keresünk (pl. S06E21), a "Csillagkapu S01-S10"
-  // season pack-ban NEM szerepel az "S06E21" minta — csak "S01-S10" van a névben.
-  // Ha az egyéni "S06" mintát keresnénk előbb, az megtalálná a 4-5 egyéni S06
-  // lemezt (D1-D4) és AZONNAL return-ölne — a range fázis soha nem futna le,
-  // és a season pack (ami ~300 seed, a legjobb minőségű) elveszne.
-  //
-  // A range és egyéni évad eredményeit ÖSSZEGYŰJTJÜK (deduplikálva), hogy mindkét
-  // csoport szerepeljen a jelöltek között. A seeders szerinti rendezés később
-  // rangsorolja őket.
-  const rangeResults = torrents.filter(t => {
-    const rangeMatch = t.title.match(/[Ss](\d+)\s*[-–]\s*[Ss]?(\d+)/)
-    if (rangeMatch) {
-      const start = parseInt(rangeMatch[1], 10)
-      const end = parseInt(rangeMatch[2], 10)
-      return season >= start && season <= end
-    }
-    const rangeMatch2 = t.title.match(/(\d+)\s*[-–]\s*(\d+)\s*(évad|season)/i)
-    if (rangeMatch2) {
-      const start = parseInt(rangeMatch2[1], 10)
-      const end = parseInt(rangeMatch2[2], 10)
-      return season >= start && season <= end
-    }
-    return false
-  })
-
-  // 3. fázis: egyéni évad alapú keresés (S06, 6. évad, Season 6)
-  const seasonPatterns = [
-    new RegExp(`[Ss]${s2}\\b`, 'i'),          // S06 (szóhatárral)
-    new RegExp(`[Ss]eason\\s*${season}`, 'i'), // Season 6
-    new RegExp(`${season}\\.\\s*[Ee]vad`, 'i') // 6. évad
-  ]
-  const seasonMatch = torrents.filter(t => seasonPatterns.some(p => p.test(t.title)))
-
-  // Összegyűjtjük mindkettőt (deduplikálás ID alapján)
-  const all = [...rangeResults]
-  for (const t of seasonMatch) {
-    if (!all.find(x => x.id === t.id)) all.push(t)
-  }
-
-  if (all.length > 0) {
-    const rangeCount = rangeResults.length
-    const seasonCount = all.length - rangeCount
-    console.log(`[STREAM] Epizód szűrés: ${torrents.length} → ${all.length} (range: ${rangeCount}, évad: ${seasonCount})`)
-    return all
-  }
-
-  // 4. fázis: nincs egyezés → teljes listát adjuk vissza
-  console.log(`[STREAM] Epizód szűrés: ${torrents.length} → ${torrents.length} (nincs egyezés)`)
-  return torrents
-}
+// ─── Segéd: a tényleges epizód-szűrés az episodeFilter.js modulban ──
+// (A régi beágyazott filterByEpisode törölve: a `[Ss](\d{1,2})\b` őr az
+// "S02E01" címekben nem talált évadot → S01E01 kérésre S02E01-et adott.)
 
 // ─── Segéd: IMDB ID kinyerése (sorozatoknál :season:episode levágása)
 function parseImdbId(id) {
